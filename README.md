@@ -26,18 +26,46 @@ Nonlinear stages (Drive, Detune, Bitcrush, Chorus/Flanger) run at 2x oversamplin
 
 ## Status
 
-Alpha. Scaffold complete. DSP is stubbed (pass-through) across all stages. Preset values load correctly; actual DSP voicing is pending. The plugin loads in Logic Pro, Ableton, and Standalone, and the UI is functional.
+Alpha. Most stages are voiced and audibly shape the signal: Drive, Detune, Chorus, Vibrato, Wow/Flutter, and Spring Reverb. Bitcrush, Slap Delay, Plate Reverb, and the Flanger mode of the Chorus stage are still pass-through stubs awaiting voicing. Presets load correctly, the UI is functional, and the plugin runs in Logic Pro, Ableton, and Standalone.
+
+Voicing is rough first-draft across the board. Expect tuning passes per stage and per preset before anything ships as v1.
 
 Roadmap (rough, not committed):
 
-- Voice the DSP stages starting with Drive, Detune, Chorus
+- Voice the remaining stubbed stages: Bitcrush, Slap Delay, Plate Reverb, Flanger mode
+- Tune voicing across the five presets once stage Hz mappings stabilize
 - Tremolo and Delay stages in an expanding drawer
 - Character toggle on Drive (tube vs digital clip) for PALTH accuracy
 - More presets
 
-## Build
+## Install
 
-Requires CMake, Xcode command line tools, and JUCE (expected at a sibling path; see `CMakeLists.txt`).
+For musicians who just want to use the plugin. Download a release, drag two files into your plugin folders, restart your DAW.
+
+1. Go to the [Releases page](https://github.com/orphicaxiom/big-dawg/releases) and download the latest zip.
+2. Unzip it.
+3. Drag `BigDawg.component` to `~/Library/Audio/Plug-Ins/Components/`.
+4. Drag `BigDawg.vst3` to `~/Library/Audio/Plug-Ins/VST3/`.
+5. Restart your DAW and rescan plugins.
+
+`~/Library` is hidden in Finder by default. In Finder, hit `Cmd+Shift+G` and paste the path.
+
+### Troubleshooting
+
+The binary is unsigned. macOS Gatekeeper will quarantine it on download and the plugin won't load until you remove the quarantine attribute. Open Terminal and run:
+
+```bash
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/BigDawg.component
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/BigDawg.vst3
+```
+
+Restart your DAW after running these.
+
+If the plugin still doesn't appear, try a hard rescan in your DAW (in Logic: delete the plugin cache at `~/Library/Caches/AudioUnitCache/` and restart).
+
+## Build from source
+
+For developers. Requires CMake, Xcode command line tools, and JUCE (expected at a sibling path; see `CMakeLists.txt`).
 
 ```bash
 cd demarco-vst
