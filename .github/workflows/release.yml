@@ -34,9 +34,9 @@ jobs:
         run: |
           set -euo pipefail
           for f in \
-            "build/DemarcoTone_artefacts/AU/BigDawg.component" \
-            "build/DemarcoTone_artefacts/VST3/BigDawg.vst3" \
-            "build/DemarcoTone_artefacts/Standalone/BigDawg.app"; do
+            "build/DemarcoTone_artefacts/Release/AU/BigDawg.component" \
+            "build/DemarcoTone_artefacts/Release/VST3/BigDawg.vst3" \
+            "build/DemarcoTone_artefacts/Release/Standalone/BigDawg.app"; do
             if [ ! -e "$f" ]; then
               echo "Missing artifact: $f" >&2
               exit 1
@@ -50,9 +50,9 @@ jobs:
           STAGE="release/$PKG"
           mkdir -p "$STAGE"
 
-          cp -R "build/DemarcoTone_artefacts/AU/BigDawg.component"    "$STAGE/"
-          cp -R "build/DemarcoTone_artefacts/VST3/BigDawg.vst3"        "$STAGE/"
-          cp -R "build/DemarcoTone_artefacts/Standalone/BigDawg.app"   "$STAGE/"
+          cp -R "build/DemarcoTone_artefacts/Release/AU/BigDawg.component"    "$STAGE/"
+          cp -R "build/DemarcoTone_artefacts/Release/VST3/BigDawg.vst3"        "$STAGE/"
+          cp -R "build/DemarcoTone_artefacts/Release/Standalone/BigDawg.app"   "$STAGE/"
 
           cat > "$STAGE/README.txt" <<'EOF'
           BIG DAWG, install
