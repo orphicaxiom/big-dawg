@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and package macOS plugins
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clone JUCE 8.0.12
+        run: |
+          git clone --depth 1 --branch 8.0.12 \
+            https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Configure (Release)
+        run: |
+          cmake -B build -G "Unix Makefiles" \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Verify artifacts exist
+        run: |
+          set -euo pipefail
+          for f in \
+            "build/DemarcoTone_artefacts/AU/BigDawg.component" \
+            "build/DemarcoTone_artefacts/VST3/BigDawg.vst3" \
+            "build/DemarcoTone_artefacts/Standalone/BigDawg.app"; do
+            if [ ! -e "$f" ]; then
+              echo "Missing artifact: $f" >&2
+              exit 1
+            fi
+          done
+
+      - name: Package release zip
+        run: |
+          set -euo pipefail
+          PKG="BigDawg-${{ github.ref_name }}-macOS"
+          STAGE="release/$PKG"
+          mkdir -p "$STAGE"
+
+          cp -R "build/DemarcoTone_artefacts/AU/BigDawg.component"    "$STAGE/"
+          cp -R "build/DemarcoTone_artefacts/VST3/BigDawg.vst3"        "$STAGE/"
+          cp -R "build/DemarcoTone_artefacts/Standalone/BigDawg.app"   "$STAGE/"
+
+          cat > "$STAGE/README.txt" <<'EOF'
+          BIG DAWG, install
+
+          1. Drag BigDawg.component to ~/Library/Audio/Plug-Ins/Components/
+          2. Drag BigDawg.vst3 to ~/Library/Audio/Plug-Ins/VST3/
+          3. Restart your DAW and rescan plugins.
+
+          ~/Library is hidden in Finder by default. In Finder, hit Cmd+Shift+G
+          and paste the path.
+
+          Troubleshooting (Gatekeeper quarantine)
+
+          The binary is unsigned. macOS Gatekeeper will quarantine it on
+          download and the plugin won't load until you remove the
+          quarantine attribute. Open Terminal and run:
+
+            xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/BigDawg.component
+            xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/BigDawg.vst3
+
+          Restart your DAW after running these.
+          EOF
+
+          # Use ditto to preserve macOS bundle structure (resource forks,
+          # extended attrs) inside the zip — nicer for end-user drag/drop.
+          ditto -c -k --sequesterRsrc --keepParent "$STAGE" "${PKG}.zip"
+
+          ls -lh "${PKG}.zip"
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          files: BigDawg-${{ github.ref_name }}-macOS.zip
+          generate_release_notes: false
+          fail_on_unmatched_files: true
