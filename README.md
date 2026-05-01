@@ -24,6 +24,8 @@ Nonlinear stages (Drive, Detune, Bitcrush, Chorus/Flanger) run at 2x oversamplin
 - **SLOWCORE** - Birth Day, Low, Bedhead, Duster, Red House Painters territory. Cleaner-leaning drive, atmospheric spring reverb, a touch of tape feel. Genre-spanning rather than a specific-band recreation.
 - **BASELINE** - Everything off. Reset reference.
 
+The HI-FI toggle in the top bar scales drive, wow/flutter, and bitcrush down across all presets while preserving detune, chorus, vibrato, and reverb. Each preset retains its character at reduced lo-fi intensity.
+
 ## Status
 
 Alpha. Most stages are voiced and audibly shape the signal: Drive, Detune, Chorus, Vibrato, Wow/Flutter, and Spring Reverb. Bitcrush, Slap Delay, Plate Reverb, and the Flanger mode of the Chorus stage are still pass-through stubs awaiting voicing. Presets load correctly, the UI is functional, and the plugin runs in Logic Pro, Ableton, and Standalone.

@@ -210,9 +210,13 @@ private:
     std::unique_ptr<BoolToggleAttachment>   chorusOnAtt;
     std::unique_ptr<BoolToggleAttachment>   vibratoOnAtt;
     std::unique_ptr<BoolToggleAttachment>   reverbOnAtt;
+    std::unique_ptr<BoolToggleAttachment>   hifiAtt;
     std::unique_ptr<ChoiceToggleAttachment> chorusShapeAtt;
     std::unique_ptr<ChoiceToggleAttachment> chorusModeAtt;
     std::unique_ptr<ChoiceToggleAttachment> reverbModeAtt;
+
+    // Top bar — global mode (HI-FI scales lo-fi stages down at DSP boundary).
+    BoxToggle hifiToggle { "LO-FI", "HI-FI" };
 
     PresetStepper presetStepper;
 

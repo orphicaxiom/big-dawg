@@ -94,6 +94,10 @@ APVTS::ParameterLayout DemarcoToneProcessor::createParameterLayout()
         juce::ParameterID{ ParamID::outputTrim, 1 }, "Output Trim",
         Range(-24.0f, 12.0f, 0.1f), 0.0f));
 
+    // Global mode (persists across preset changes).
+    p.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{ ParamID::hifiMode, 1 }, "Hi-Fi Mode", false));
+
     return { p.begin(), p.end() };
 }
 
@@ -227,13 +231,36 @@ void DemarcoToneProcessor::syncParametersToDsp()
         return 0.0f;
     };
 
-    softClip.setDrive(getF(ParamID::drive));
+    // Hi-Fi mode scales the lo-fi-character stages at the DSP boundary.
+    // Stored APVTS values are untouched; only the values handed to the DSP
+    // stages are reduced. Preset character is preserved at lower lo-fi
+    // intensity rather than flattened toward a common cleaner sound.
+    //
+    // Single source of truth for the scaling lives below.
+    const bool hifi = getF(ParamID::hifiMode) >= 0.5f;
+    constexpr float driveScale = 0.30f;   // x0.30 of preset's drive
+    constexpr float wowScale   = 0.20f;   // x0.20 of preset's wow/flutter
+
+    const float driveEff = hifi ? getF(ParamID::drive)      * driveScale
+                                : getF(ParamID::drive);
+    softClip.setDrive(driveEff);
 
     detune.setBypassed(getF(ParamID::detuneOn) < 0.5f);
     detune.setCents(getF(ParamID::detune));
 
-    bitcrusher.setBits(getF(ParamID::bitcrushBits));
-    bitcrusher.setRate(getF(ParamID::bitcrushRate));
+    // Bitcrush in hi-fi: full bypass (bits=16, rate=1.0 are the transparent
+    // values defined by the param ranges). Bitcrush perceptually doesn't
+    // scale linearly — partial reduction sounds worse, not cleaner.
+    if (hifi)
+    {
+        bitcrusher.setBits(16.0f);
+        bitcrusher.setRate(1.0f);
+    }
+    else
+    {
+        bitcrusher.setBits(getF(ParamID::bitcrushBits));
+        bitcrusher.setRate(getF(ParamID::bitcrushRate));
+    }
 
     chorus.setBypassed(getF(ParamID::chorusOn) < 0.5f);
     chorus.setMode (getF(ParamID::chorusMode) < 0.5f
@@ -249,7 +276,9 @@ void DemarcoToneProcessor::syncParametersToDsp()
     vibrato.setRate (getF(ParamID::vibratoRate));
     vibrato.setDepth(getF(ParamID::vibratoDepth));
 
-    wowFlutter.setAmount(getF(ParamID::wowFlutter));
+    const float wowEff = hifi ? getF(ParamID::wowFlutter) * wowScale
+                              : getF(ParamID::wowFlutter);
+    wowFlutter.setAmount(wowEff);
 
     // Reverb: one param set pushed to all three classes; dispatcher picks
     // which one runs. Keeps shared state (mix/tone/bypass) coherent across

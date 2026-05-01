@@ -61,6 +61,10 @@ namespace ParamID
 
     // Output
     static constexpr auto outputTrim  = "outputTrim";   // dB, -24..+12
+
+    // Global mode — scales the lo-fi-character stages (Drive, Wow/Flutter,
+    // Bitcrush) at the DSP boundary; stored value of those params is unchanged.
+    static constexpr auto hifiMode    = "hifiMode";     // bool
 }
 
 class DemarcoToneProcessor : public juce::AudioProcessor

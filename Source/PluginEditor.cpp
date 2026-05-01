@@ -396,6 +396,7 @@ DemarcoToneEditor::DemarcoToneEditor(DemarcoToneProcessor& p)
     addAndMakeVisible(vibratoOnToggle);
     addAndMakeVisible(reverbModeToggle);
     addAndMakeVisible(reverbOnToggle);
+    addAndMakeVisible(hifiToggle);
 
     // Detune — double-click to zero
     detuneKnob.setDoubleClickReturnValue(true, 0.0);
@@ -425,6 +426,8 @@ DemarcoToneEditor::DemarcoToneEditor(DemarcoToneProcessor& p)
         apvts, ParamID::vibratoOn, vibratoOnToggle);
     reverbOnAtt  = std::make_unique<BoolToggleAttachment>(
         apvts, ParamID::reverbOn,  reverbOnToggle);
+    hifiAtt      = std::make_unique<BoolToggleAttachment>(
+        apvts, ParamID::hifiMode,  hifiToggle);
     chorusShapeAtt = std::make_unique<ChoiceToggleAttachment>(
         apvts, ParamID::chorusShape, chorusShapeToggle);
     chorusModeAtt  = std::make_unique<ChoiceToggleAttachment>(
@@ -558,12 +561,21 @@ void DemarcoToneEditor::resized()
 {
     const int yContent = 33;
 
-    // Preset stepper sits on the top bar, right-aligned.
+    // Top-bar right side, right-aligned, in this order (right to left):
+    //   PresetStepper  |  V0.1  |  HI-FI toggle
     const int stepperW = 140;
     const int stepperH = 20;
     presetStepper.setBounds(getWidth() - stepperW - 14,
                             (32 - stepperH) / 2,
                             stepperW, stepperH);
+
+    // V0.1 is painted in paint() as text; reserve 40px to its left.
+    // HI-FI toggle sits to the left of V0.1 with a 14px gap.
+    const int hifiW = 78;     // 39px per cell (LO-FI / HI-FI), readable at 10px mono bold
+    const int hifiH = 18;
+    const int hifiX = presetStepper.getX() - 8 /*stepper-V0.1 gap*/
+                      - 40 /*V0.1*/ - 14 /*V0.1-toggle gap*/ - hifiW;
+    hifiToggle.setBounds(hifiX, (32 - hifiH) / 2, hifiW, hifiH);
 
     // Column x-origins (must match paint()) — 8 columns, total 840.
     // 0=DRIVE 1=DETUNE 2=BITCRUSH 3=CHORUS 4=VIBRATO 5=WOW 6=REVERB 7=OUT
