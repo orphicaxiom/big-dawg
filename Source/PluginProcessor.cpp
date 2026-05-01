@@ -307,7 +307,7 @@ void DemarcoToneProcessor::loadPreset(int index)
             currentPresetIndex = 4;
             break;
         case 3:
-            loadInhalantPreset();
+            loadSlowcorePreset();
             currentPresetIndex = 3;
             break;
         case 2:
@@ -416,13 +416,15 @@ void DemarcoToneProcessor::loadPalthPreset()
     setParam(apvts, ParamID::outputTrim,   -0.10f); // duck for wet mix + hot drive
 }
 
-// INHALANT — Duster / Stratosphere ADJACENT (not fidelity).
-// Approximates slowcore atmosphere with what we have: minimal chorus,
-// wow/flutter as tape-adjacent, spring reverb. Kept for the name, not for fidelity.
-void DemarcoToneProcessor::loadInhalantPreset()
+// SLOWCORE — genre-spanning slowcore atmosphere (Birth Day / Low / Bedhead /
+// Duster / Red House Painters territory). Cleaner-leaning drive, atmospheric
+// spring reverb, mild wow/flutter. Was previously named INHALANT and aimed
+// specifically at Duster; broadened here to serve the genre rather than the
+// single band.
+void DemarcoToneProcessor::loadSlowcorePreset()
 {
     setParam(apvts, ParamID::drive,         0.40f); // coloured drive, Blues-Driver-adjacent
-    setParam(apvts, ParamID::detuneOn,      0.0f); // no detune — Duster tuning stable
+    setParam(apvts, ParamID::detuneOn,      0.0f); // tuning stable by default
     setParam(apvts, ParamID::detune,        0.0f);
     setParam(apvts, ParamID::bitcrushBits, 16.0f); // transparent
     setParam(apvts, ParamID::bitcrushRate,  1.0f); // transparent

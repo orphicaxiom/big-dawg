@@ -103,7 +103,7 @@ public:
         return { "VICEROY",
                  "ELVIS (THE SAD ONE)",
                  "PALTH",
-                 "INHALANT",
+                 "SLOWCORE",
                  "BASELINE" };
     }
     int  getCurrentPresetIndex() const { return currentPresetIndex; }
@@ -117,7 +117,7 @@ private:
     void loadViceroyPreset();
     void loadElvisPreset();
     void loadPalthPreset();
-    void loadInhalantPreset();
+    void loadSlowcorePreset();
     void loadBaselinePreset();
 
     int currentPresetIndex = 0;

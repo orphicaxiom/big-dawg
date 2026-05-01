@@ -21,7 +21,7 @@ Nonlinear stages (Drive, Detune, Bitcrush, Chorus/Flanger) run at 2x oversamplin
 - **VICEROY** - Mac DeMarco, Salad Days era. Teisco through a Vibro Champ, Alesis rack chorus, Fostex tape wow.
 - **ELVIS (THE SAD ONE)** - Mat Cothran, Coma Cinema and Elvis Depressedly. Handheld tape recorder character, lightly overdriven, warbly.
 - **PALTH** - Daniel Johann Lines, salvia palth, melanchole. The core move is cranking drive until the signal clips. Wide slow chorus, plate reverb soaked.
-- **INHALANT** - Duster, Stratosphere adjacent. Not a true Duster recreation (the real recipe needs tape delay and tremolo, not yet implemented) but a slowcore atmosphere approximation.
+- **SLOWCORE** - Birth Day, Low, Bedhead, Duster, Red House Painters territory. Cleaner-leaning drive, atmospheric spring reverb, a touch of tape feel. Genre-spanning rather than a specific-band recreation.
 - **BASELINE** - Everything off. Reset reference.
 
 ## Status
