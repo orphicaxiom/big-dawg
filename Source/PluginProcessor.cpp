@@ -231,22 +231,28 @@ void DemarcoToneProcessor::syncParametersToDsp()
         return 0.0f;
     };
 
-    // Hi-Fi mode scales the lo-fi-character stages at the DSP boundary.
+    // Hi-Fi mode reduces all lo-fi-character stages at the DSP boundary
+    // while preserving the spring reverb tone and the core preset structure.
     // Stored APVTS values are untouched; only the values handed to the DSP
-    // stages are reduced. Preset character is preserved at lower lo-fi
-    // intensity rather than flattened toward a common cleaner sound.
+    // stages are reduced. Spring reverb stays unscaled — its tone is part
+    // of the preset's identity, not its lo-fi-ness.
     //
     // Single source of truth for the scaling lives below.
     const bool hifi = getF(ParamID::hifiMode) >= 0.5f;
-    constexpr float driveScale = 0.30f;   // x0.30 of preset's drive
-    constexpr float wowScale   = 0.20f;   // x0.20 of preset's wow/flutter
+    constexpr float driveScale         = 0.30f;  // x0.30 of preset's drive
+    constexpr float wowScale           = 0.20f;  // x0.20 of preset's wow/flutter
+    constexpr float chorusMixScale     = 0.70f;  // x0.70 of preset's chorus mix
+    constexpr float vibratoDepthScale  = 0.70f;  // x0.70 of preset's vibrato depth
+    constexpr float detuneScale        = 0.70f;  // x0.70 of preset's detune cents
 
     const float driveEff = hifi ? getF(ParamID::drive)      * driveScale
                                 : getF(ParamID::drive);
     softClip.setDrive(driveEff);
 
     detune.setBypassed(getF(ParamID::detuneOn) < 0.5f);
-    detune.setCents(getF(ParamID::detune));
+    const float detuneEff = hifi ? getF(ParamID::detune) * detuneScale
+                                 : getF(ParamID::detune);
+    detune.setCents(detuneEff);
 
     // Bitcrush in hi-fi: full bypass (bits=16, rate=1.0 are the transparent
     // values defined by the param ranges). Bitcrush perceptually doesn't
@@ -267,14 +273,18 @@ void DemarcoToneProcessor::syncParametersToDsp()
                     ? Chorus::Mode::Chorus : Chorus::Mode::Flanger);
     chorus.setRate (getF(ParamID::chorusRate));
     chorus.setDepth(getF(ParamID::chorusDepth));
-    chorus.setMix  (getF(ParamID::chorusMix));
+    const float chorusMixEff = hifi ? getF(ParamID::chorusMix) * chorusMixScale
+                                    : getF(ParamID::chorusMix);
+    chorus.setMix  (chorusMixEff);
     chorus.setWidth(getF(ParamID::chorusWidth));
     chorus.setShape(getF(ParamID::chorusShape) < 0.5f
                     ? Chorus::Shape::Sine : Chorus::Shape::Triangle);
 
     vibrato.setBypassed(getF(ParamID::vibratoOn) < 0.5f);
     vibrato.setRate (getF(ParamID::vibratoRate));
-    vibrato.setDepth(getF(ParamID::vibratoDepth));
+    const float vibratoDepthEff = hifi ? getF(ParamID::vibratoDepth) * vibratoDepthScale
+                                       : getF(ParamID::vibratoDepth);
+    vibrato.setDepth(vibratoDepthEff);
 
     const float wowEff = hifi ? getF(ParamID::wowFlutter) * wowScale
                               : getF(ParamID::wowFlutter);

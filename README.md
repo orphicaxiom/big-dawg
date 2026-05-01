@@ -24,7 +24,7 @@ Nonlinear stages (Drive, Detune, Bitcrush, Chorus/Flanger) run at 2x oversamplin
 - **SLOWCORE** - Birth Day, Low, Bedhead, Duster, Red House Painters territory. Cleaner-leaning drive, atmospheric spring reverb, a touch of tape feel. Genre-spanning rather than a specific-band recreation.
 - **BASELINE** - Everything off. Reset reference.
 
-The HI-FI toggle in the top bar scales drive, wow/flutter, and bitcrush down across all presets while preserving detune, chorus, vibrato, and reverb. Each preset retains its character at reduced lo-fi intensity.
+The HI-FI toggle in the top bar reduces lo-fi character across all presets while preserving each preset's spring reverb voicing. Affects drive, wow/flutter, bitcrush, chorus, vibrato, and detune. Effect varies by preset depending on which stages carry their character.
 
 ## Status
 
