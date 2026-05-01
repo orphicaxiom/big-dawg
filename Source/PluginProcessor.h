@@ -62,9 +62,29 @@ namespace ParamID
     // Output
     static constexpr auto outputTrim  = "outputTrim";   // dB, -24..+12
 
-    // Global mode — scales the lo-fi-character stages (Drive, Wow/Flutter,
-    // Bitcrush) at the DSP boundary; stored value of those params is unchanged.
+    // Global mode — scales lo-fi-character stages at the DSP boundary;
+    // stored value of those params is unchanged. See HifiScale below.
     static constexpr auto hifiMode    = "hifiMode";     // bool
+}
+
+// ---------------------------------------------------------------------------
+// HifiScale — single source of truth for the per-stage scaling applied when
+// hifiMode is on. Read by both syncParametersToDsp (DSP boundary) and the
+// editor's hi-fi visual sync (so knobs can show their effective positions).
+// Spring reverb stays unscaled; bitcrush is full bypass (set to transparent
+// values, not multiplied).
+// ---------------------------------------------------------------------------
+namespace HifiScale
+{
+    constexpr float drive          = 0.30f;
+    constexpr float wow            = 0.20f;
+    constexpr float chorusMix      = 0.50f;
+    constexpr float vibratoDepth   = 0.70f;
+    constexpr float detune         = 0.70f;
+
+    // Bitcrush bypass targets (transparent values defined by param ranges).
+    constexpr float bitcrushBitsBypass = 16.0f;
+    constexpr float bitcrushRateBypass = 1.0f;
 }
 
 class DemarcoToneProcessor : public juce::AudioProcessor

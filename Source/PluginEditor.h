@@ -54,10 +54,23 @@ public:
     juce::String formatValue() const;
     juce::Colour tierColour() const;
 
+    // Visual-only override. When active, paint() and formatValue() use
+    // overrideValue instead of the slider's actual value, and the knob
+    // renders at reduced opacity to signal "this is a derived value, not
+    // your input." Slider value remains bound to its APVTS param via the
+    // SliderAttachment; only the rendering changes. Pair with setEnabled
+    // (false) to lock interaction while override is active.
+    void setVisualOverride(bool active, float overrideValue);
+
 private:
+    double currentDisplayValue() const;
+
     juce::String nameLabel;
     Format       format;
     Tier         tier;
+
+    bool   overrideActive = false;
+    float  overrideValue  = 0.0f;
 };
 
 // ---------------------------------------------------------------------------
@@ -156,7 +169,8 @@ private:
 // ---------------------------------------------------------------------------
 // Main editor
 // ---------------------------------------------------------------------------
-class DemarcoToneEditor : public juce::AudioProcessorEditor
+class DemarcoToneEditor : public juce::AudioProcessorEditor,
+                          private juce::Timer
 {
 public:
     explicit DemarcoToneEditor(DemarcoToneProcessor&);
@@ -166,6 +180,13 @@ public:
     void resized() override;
 
 private:
+    // Timer drives the hi-fi visual sync — when hifiMode is on, scaled
+    // knobs render at their effective positions at reduced opacity. The
+    // SliderAttachments stay bound to the actual APVTS values; only the
+    // visualization changes. Polling cleanly handles all sources of
+    // change (toggle flip, preset load, manual drag, host automation).
+    void timerCallback() override;
+
     DemarcoToneProcessor& proc;
     BigDawgLookAndFeel lnf;
 

@@ -59,9 +59,23 @@ juce::Colour ArcKnob::tierColour() const
     return redPrimary;
 }
 
+double ArcKnob::currentDisplayValue() const
+{
+    return overrideActive ? (double)overrideValue : getValue();
+}
+
+void ArcKnob::setVisualOverride(bool active, float v)
+{
+    if (overrideActive == active && std::abs(overrideValue - v) < 1e-4f)
+        return;
+    overrideActive = active;
+    overrideValue  = v;
+    repaint();
+}
+
 juce::String ArcKnob::formatValue() const
 {
-    const double v = getValue();
+    const double v = currentDisplayValue();
     switch (format)
     {
         case Format::Hz:      return juce::String(v, 2) + " HZ";
@@ -80,8 +94,13 @@ void ArcKnob::paint(juce::Graphics& g)
     const float labelH = 12.0f;
     const float valueH = 12.0f;
 
+    // Reduced opacity when displaying a hi-fi-derived value, signalling
+    // "not your input — this is what the mode is doing."
+    const float alpha   = overrideActive ? 0.55f : 1.0f;
+    const auto  textInk = ink.withMultipliedAlpha(alpha);
+
     // Label above
-    g.setColour(ink);
+    g.setColour(textInk);
     g.setFont(BigDawgLookAndFeel::makeMonoFont(10.0f, true));
     g.drawFittedText(nameLabel.toUpperCase(),
                      bounds.removeFromTop(labelH).toNearestInt(),
@@ -89,6 +108,7 @@ void ArcKnob::paint(juce::Graphics& g)
 
     // Value below
     auto valueBox = bounds.removeFromBottom(valueH);
+    g.setColour(textInk);
     g.setFont(BigDawgLookAndFeel::makeMonoFont(10.0f, false));
     g.drawFittedText(formatValue(),
                      valueBox.toNearestInt(),
@@ -106,14 +126,15 @@ void ArcKnob::paint(juce::Graphics& g)
     const float endAngle   = juce::MathConstants<float>::pi * 2.75f;
 
     const double range = getMaximum() - getMinimum();
-    const double norm  = range > 0.0 ? (getValue() - getMinimum()) / range : 0.0;
+    const double dispV = currentDisplayValue();
+    const double norm  = range > 0.0 ? (dispV - getMinimum()) / range : 0.0;
     const float valAngle = startAngle + (float)norm * (endAngle - startAngle);
 
     // Ink track
     juce::Path track;
     track.addCentredArc(cx, cy, radius, radius, 0.0f,
                         startAngle, endAngle, true);
-    g.setColour(ink);
+    g.setColour(ink.withMultipliedAlpha(alpha));
     g.strokePath(track, juce::PathStrokeType(1.5f));
 
     // Red value arc — for bipolar params, draw from center (mid-angle), else from start.
@@ -134,7 +155,7 @@ void ArcKnob::paint(juce::Graphics& g)
         valueArc.addCentredArc(cx, cy, radius, radius, 0.0f,
                                startAngle, valAngle, true);
     }
-    const auto accent = tierColour();
+    const auto accent = tierColour().withMultipliedAlpha(alpha);
     g.setColour(accent);
     g.strokePath(valueArc, juce::PathStrokeType(2.5f));
 
@@ -443,6 +464,36 @@ DemarcoToneEditor::DemarcoToneEditor(DemarcoToneProcessor& p)
 
     setSize(840, 240);
     setResizable(false, false);
+
+    // Hi-fi visual sync — 30 Hz is more than enough for state changes.
+    startTimerHz(30);
+}
+
+void DemarcoToneEditor::timerCallback()
+{
+    auto& apvts = proc.getAPVTS();
+    auto getF = [&apvts](const juce::String& id) -> float
+    {
+        if (auto* raw = apvts.getRawParameterValue(id))
+            return raw->load();
+        return 0.0f;
+    };
+
+    const bool hifi = getF(ParamID::hifiMode) >= 0.5f;
+
+    auto applyOverride = [hifi](ArcKnob& k, float scaled)
+    {
+        k.setVisualOverride(hifi, scaled);
+        k.setEnabled(!hifi);
+    };
+
+    applyOverride(driveKnob,        getF(ParamID::drive)        * HifiScale::drive);
+    applyOverride(detuneKnob,       getF(ParamID::detune)       * HifiScale::detune);
+    applyOverride(bitcrushBitsKnob, HifiScale::bitcrushBitsBypass);
+    applyOverride(bitcrushRateKnob, HifiScale::bitcrushRateBypass);
+    applyOverride(chorusMix,        getF(ParamID::chorusMix)    * HifiScale::chorusMix);
+    applyOverride(vibratoDepth,     getF(ParamID::vibratoDepth) * HifiScale::vibratoDepth);
+    applyOverride(wowFlutter,       getF(ParamID::wowFlutter)   * HifiScale::wow);
 }
 
 DemarcoToneEditor::~DemarcoToneEditor()

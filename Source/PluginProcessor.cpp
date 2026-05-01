@@ -237,30 +237,26 @@ void DemarcoToneProcessor::syncParametersToDsp()
     // stages are reduced. Spring reverb stays unscaled — its tone is part
     // of the preset's identity, not its lo-fi-ness.
     //
-    // Single source of truth for the scaling lives below.
+    // Scale factors live in HifiScale (PluginProcessor.h) so the editor's
+    // visual sync can read the same constants.
     const bool hifi = getF(ParamID::hifiMode) >= 0.5f;
-    constexpr float driveScale         = 0.30f;  // x0.30 of preset's drive
-    constexpr float wowScale           = 0.20f;  // x0.20 of preset's wow/flutter
-    constexpr float chorusMixScale     = 0.70f;  // x0.70 of preset's chorus mix
-    constexpr float vibratoDepthScale  = 0.70f;  // x0.70 of preset's vibrato depth
-    constexpr float detuneScale        = 0.70f;  // x0.70 of preset's detune cents
 
-    const float driveEff = hifi ? getF(ParamID::drive)      * driveScale
+    const float driveEff = hifi ? getF(ParamID::drive) * HifiScale::drive
                                 : getF(ParamID::drive);
     softClip.setDrive(driveEff);
 
     detune.setBypassed(getF(ParamID::detuneOn) < 0.5f);
-    const float detuneEff = hifi ? getF(ParamID::detune) * detuneScale
+    const float detuneEff = hifi ? getF(ParamID::detune) * HifiScale::detune
                                  : getF(ParamID::detune);
     detune.setCents(detuneEff);
 
-    // Bitcrush in hi-fi: full bypass (bits=16, rate=1.0 are the transparent
-    // values defined by the param ranges). Bitcrush perceptually doesn't
-    // scale linearly — partial reduction sounds worse, not cleaner.
+    // Bitcrush in hi-fi: full bypass to transparent values. Bitcrush
+    // perceptually doesn't scale linearly — partial reduction sounds
+    // worse, not cleaner.
     if (hifi)
     {
-        bitcrusher.setBits(16.0f);
-        bitcrusher.setRate(1.0f);
+        bitcrusher.setBits(HifiScale::bitcrushBitsBypass);
+        bitcrusher.setRate(HifiScale::bitcrushRateBypass);
     }
     else
     {
@@ -273,7 +269,7 @@ void DemarcoToneProcessor::syncParametersToDsp()
                     ? Chorus::Mode::Chorus : Chorus::Mode::Flanger);
     chorus.setRate (getF(ParamID::chorusRate));
     chorus.setDepth(getF(ParamID::chorusDepth));
-    const float chorusMixEff = hifi ? getF(ParamID::chorusMix) * chorusMixScale
+    const float chorusMixEff = hifi ? getF(ParamID::chorusMix) * HifiScale::chorusMix
                                     : getF(ParamID::chorusMix);
     chorus.setMix  (chorusMixEff);
     chorus.setWidth(getF(ParamID::chorusWidth));
@@ -282,11 +278,11 @@ void DemarcoToneProcessor::syncParametersToDsp()
 
     vibrato.setBypassed(getF(ParamID::vibratoOn) < 0.5f);
     vibrato.setRate (getF(ParamID::vibratoRate));
-    const float vibratoDepthEff = hifi ? getF(ParamID::vibratoDepth) * vibratoDepthScale
+    const float vibratoDepthEff = hifi ? getF(ParamID::vibratoDepth) * HifiScale::vibratoDepth
                                        : getF(ParamID::vibratoDepth);
     vibrato.setDepth(vibratoDepthEff);
 
-    const float wowEff = hifi ? getF(ParamID::wowFlutter) * wowScale
+    const float wowEff = hifi ? getF(ParamID::wowFlutter) * HifiScale::wow
                               : getF(ParamID::wowFlutter);
     wowFlutter.setAmount(wowEff);
 
@@ -450,7 +446,7 @@ void DemarcoToneProcessor::loadPalthPreset()
     setParam(apvts, ParamID::wowFlutter,    0.10f); // minimal — no tape in his setup
     setParam(apvts, ParamID::reverbOn,      1.0f);
     setParam(apvts, ParamID::reverbMode,    2.0f); // Plate — shoegaze move
-    setParam(apvts, ParamID::reverbMix,     0.60f); // reverb-soaked, signature
+    setParam(apvts, ParamID::reverbMix,     0.70f); // reverb-soaked, signature (bumped from 0.60)
     setParam(apvts, ParamID::reverbTone,    0.0f);
     setParam(apvts, ParamID::outputTrim,   -0.10f); // duck for wet mix + hot drive
 }
