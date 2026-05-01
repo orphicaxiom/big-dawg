@@ -3,71 +3,74 @@
 #include "PluginProcessor.h"
 
 // ---------------------------------------------------------------------------
-// Palette — "imaginary 1981 hardware unit" register.
-// Sits on the shelf next to a CE-2 or Space Echo; not a SaaS UI, not a photo.
+// Palette — v0.2.0 "Vignelli-correct" register.
+// Single 10px line + 8 colored segments + ink-square endpoints. Olivetti
+// red is reserved for the DRIVE stage and the wordmark period; not used as
+// an active-state colour anywhere else.
 // ---------------------------------------------------------------------------
 namespace BigDawgColors
 {
-    static const juce::Colour paper         { 0xFFE8E9E0 };  // pale sage canvas
-    static const juce::Colour panel         { 0xFFE0E2D8 };  // section panels, 2% darker than paper
-    static const juce::Colour ink           { 0xFF1A1A1A };  // rules, text, knob rings
+    // Surface
+    static const juce::Colour paper      { 0xFFDDDED4 };  // page background
+    static const juce::Colour panelLight { 0xFFE8E9E0 };  // lighter card variant
+    static const juce::Colour ink        { 0xFF1A1A1A };  // text, outlines, ticks
+    static const juce::Colour bypass     { 0xFFB5B5AE };  // desaturated diagram segment
+    static const juce::Colour cyan       { 0xFF4A90B8 };  // also Vibrato stage colour
 
-    // Three-tier accent (same hue family, only S and V change).
-    static const juce::Colour redPrimary    { 0xFFC8342E };  // full accent: Drive, Reverb Mix, Out Trim
-    static const juce::Colour redSecondary  { 0xFF9A4A46 };  // muted: Chorus/Vibrato Rate+Depth, Wow Amount
-    static const juce::Colour redTertiary   { 0xFF8A6B5E };  // desaturated warmth: Chorus Mix/Width, Detune Cents, Reverb Tone
-
-    static const juce::Colour cyan          { 0xFF4A90B8 };  // reserved for modulation viz
+    // Eight stage colours. Verbal-spec / user picks; verify in v0.2.1
+    // once tokens.jsx is recovered.
+    static const juce::Colour stDrive    { 0xFFC8342E };  // 01 DRIVE     Olivetti red
+    static const juce::Colour stDetune   { 0xFF1F3A8A };  // 02 DETUNE    deep blue
+    static const juce::Colour stBitcrush { 0xFFE8842E };  // 03 BITCRUSH  orange
+    static const juce::Colour stChorus   { 0xFF2A8C5A };  // 04 CHORUS    green
+    static const juce::Colour stVibrato  { 0xFF4A90B8 };  // 05 VIBRATO   cyan
+    static const juce::Colour stWow      { 0xFFE8C82E };  // 06 WOW       yellow
+    static const juce::Colour stSpring   { 0xFF6A4A8C };  // 07 SPRING    purple
+    static const juce::Colour stEQ       { 0xFF1A1A1A };  // 08 EQ        ink
+    static const juce::Colour stOut      { 0xFF1A1A1A };  //    OUT       ink
 }
 
 // ---------------------------------------------------------------------------
-// BigDawgLookAndFeel — flat, hairline, no skeuomorphism
+// BigDawgLookAndFeel — typography helpers (Archivo Black + IBM Plex Mono).
 // ---------------------------------------------------------------------------
 class BigDawgLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     BigDawgLookAndFeel();
 
-    static juce::Font makeDisplayFont(float heightPx);
-    static juce::Font makeMonoFont(float heightPx, bool bold = false);
+    static juce::Font makeDisplayFont(float heightPx);                 // Archivo Black
+    static juce::Font makeMonoFont(float heightPx, bool bold = false); // IBM Plex Mono
+    static juce::Font makeMonoTabularFont(float heightPx);             // tabular figures for value readouts
 };
 
 // ---------------------------------------------------------------------------
-// ArcKnob — thin-ring arc slider
-//   - 270° sweep, 7 o'clock to 5 o'clock
-//   - ink track + tiered-red value arc
-//   - param label above (all-caps mono)
-//   - value readout below (mono)
+// Knob — D2 white-disc with colored indicator line.
+//   - paper-filled circle, 1.5px ink hairline outline
+//   - single ink/colour indicator line, -135° (min) to +135° (max)
+//   - colour matches the stage the knob belongs to
+//   - label below in Plex Mono caps; tabular value readout below that
+//   - carries the v0.1.3 visual override for hi-fi mode
 // ---------------------------------------------------------------------------
-class ArcKnob : public juce::Slider
+class Knob : public juce::Slider
 {
 public:
     enum class Format { Float2, Hz, Cents, Percent, DB, Bipolar };
-    enum class Tier   { Primary, Secondary, Tertiary };
 
-    ArcKnob(const juce::String& label,
-            Format format = Format::Float2,
-            Tier   tier   = Tier::Primary);
+    Knob(const juce::String& label, Format format, juce::Colour stageColour);
 
     void paint(juce::Graphics& g) override;
 
     juce::String formatValue() const;
-    juce::Colour tierColour() const;
 
-    // Visual-only override. When active, paint() and formatValue() use
-    // overrideValue instead of the slider's actual value, and the knob
-    // renders at reduced opacity to signal "this is a derived value, not
-    // your input." Slider value remains bound to its APVTS param via the
-    // SliderAttachment; only the rendering changes. Pair with setEnabled
-    // (false) to lock interaction while override is active.
+    // v0.1.3 hi-fi visual sync.
     void setVisualOverride(bool active, float overrideValue);
 
 private:
     double currentDisplayValue() const;
 
-    juce::String nameLabel;
-    Format       format;
-    Tier         tier;
+    juce::String  nameLabel;
+    Format        format;
+    juce::Colour  stageColour;
 
     bool   overrideActive = false;
     float  overrideValue  = 0.0f;
@@ -76,14 +79,11 @@ private:
 // ---------------------------------------------------------------------------
 // BoxToggle — N side-by-side labeled cells (radio group of 2..N).
 //   Active cell: ink fill, paper text. Inactive: paper fill, ink text + border.
-//   Value = selected cell index, 0..N-1.
 // ---------------------------------------------------------------------------
 class BoxToggle : public juce::Component
 {
 public:
-    // Two-label convenience ctor (preserves existing call sites).
     BoxToggle(const juce::String& leftLabel, const juce::String& rightLabel);
-    // Arbitrary-N ctor.
     BoxToggle(juce::StringArray labelList);
 
     void setValue(int v, juce::NotificationType n = juce::sendNotification);
@@ -101,8 +101,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// ChoiceToggleAttachment — binds a BoxToggle to an AudioParameterChoice
-// (2 items) by listening both ways.
+// Choice / Bool toggle attachments — bind a BoxToggle to APVTS.
 // ---------------------------------------------------------------------------
 class ChoiceToggleAttachment : private juce::AudioProcessorValueTreeState::Listener
 {
@@ -114,16 +113,11 @@ public:
 
 private:
     void parameterChanged(const juce::String& id, float newValue) override;
-
     juce::AudioProcessorValueTreeState& apvts;
     juce::String id;
     BoxToggle& box;
 };
 
-// ---------------------------------------------------------------------------
-// BoolToggleAttachment — binds a BoxToggle (OFF=0 / ON=1) to an
-// AudioParameterBool. Left = OFF, right = ON.
-// ---------------------------------------------------------------------------
 class BoolToggleAttachment : private juce::AudioProcessorValueTreeState::Listener
 {
 public:
@@ -134,36 +128,60 @@ public:
 
 private:
     void parameterChanged(const juce::String& id, float newValue) override;
-
     juce::AudioProcessorValueTreeState& apvts;
     juce::String id;
     BoxToggle& box;
 };
 
 // ---------------------------------------------------------------------------
-// PresetStepper — "< VICEROY >" clickable strip. Left chevron goes to prev
-// preset, right chevron to next. Label is the current preset name.
+// SignalDiagram — the horizontal flow line.
+//   Single 10px line, eight colored segments meeting at boundaries with
+//   1px ink ticks at transitions, 12×12 ink endpoint squares (IN/OUT),
+//   stage labels + 01-08 sub-numbers below.
+//
+//   Bypass-aware: polls APVTS at 30 Hz; bypassed segments render in
+//   `bypass` grey with their label dimmed in lockstep.
 // ---------------------------------------------------------------------------
-class PresetStepper : public juce::Component
+class SignalDiagram : public juce::Component, private juce::Timer
 {
 public:
-    PresetStepper();
+    explicit SignalDiagram(DemarcoToneProcessor& p);
+    ~SignalDiagram() override;
 
-    void setPresets(const juce::StringArray& names);
-    void setCurrentIndex(int idx);
-    int  getCurrentIndex() const { return index; }
+    void paint(juce::Graphics& g) override;
+
+private:
+    void timerCallback() override;
+
+    DemarcoToneProcessor& proc;
+
+    // Last-seen bypass state per stage; only repaint when something changed.
+    std::array<bool, 8> bypassedLastSeen { false, false, false, false,
+                                            false, false, false, false };
+};
+
+// ---------------------------------------------------------------------------
+// PresetSelector — header center cluster:
+//   V0.1   PRESET 03/05   < ELVIS (THE SAD ONE) >
+//   - chevrons cycle prev/next
+//   - clicking the name opens a popup of all presets
+// ---------------------------------------------------------------------------
+class PresetSelector : public juce::Component
+{
+public:
+    explicit PresetSelector(DemarcoToneProcessor& p);
 
     void paint(juce::Graphics& g) override;
     void mouseDown(const juce::MouseEvent& e) override;
 
-    std::function<void(int)> onSelect;
+    void refresh(); // pick up programmatic preset changes (preset load via API)
 
 private:
-    juce::Rectangle<int> leftHit() const;
-    juce::Rectangle<int> rightHit() const;
+    juce::Rectangle<int> leftChevronRect()  const;
+    juce::Rectangle<int> rightChevronRect() const;
+    juce::Rectangle<int> nameRect()         const;
 
-    juce::StringArray names;
-    int index = 0;
+    DemarcoToneProcessor& proc;
 };
 
 // ---------------------------------------------------------------------------
@@ -180,45 +198,57 @@ public:
     void resized() override;
 
 private:
-    // Timer drives the hi-fi visual sync — when hifiMode is on, scaled
-    // knobs render at their effective positions at reduced opacity. The
-    // SliderAttachments stay bound to the actual APVTS values; only the
-    // visualization changes. Polling cleanly handles all sources of
-    // change (toggle flip, preset load, manual drag, host automation).
-    void timerCallback() override;
+    void timerCallback() override;     // hi-fi visual override sync (v0.1.3)
 
     DemarcoToneProcessor& proc;
     BigDawgLookAndFeel lnf;
 
-    // 01 DRIVE — Primary (headline action)
-    ArcKnob driveKnob { "DRIVE", ArcKnob::Format::Float2, ArcKnob::Tier::Primary };
-    // 02 DETUNE — Tertiary (shaping offset)
+    // ── Header ────────────────────────────────────────────────────────────
+    PresetSelector presetSelector { proc };
+    BoxToggle      hifiToggle     { "LO-FI", "HI-FI" };
+
+    // ── Signal diagram ───────────────────────────────────────────────────
+    SignalDiagram  diagram        { proc };
+
+    // ── Stage controls ───────────────────────────────────────────────────
+    // 01 DRIVE
+    Knob driveKnob { "DRIVE", Knob::Format::Float2, BigDawgColors::stDrive };
+
+    // 02 DETUNE
     BoxToggle detuneOnToggle { "OFF", "ON" };
-    ArcKnob detuneKnob { "CENTS", ArcKnob::Format::Cents, ArcKnob::Tier::Tertiary };
-    // 03 BITCRUSH — Tertiary (character / shaping)
-    ArcKnob bitcrushBitsKnob { "BITS", ArcKnob::Format::Float2, ArcKnob::Tier::Tertiary };
-    ArcKnob bitcrushRateKnob { "RATE", ArcKnob::Format::Float2, ArcKnob::Tier::Tertiary };
-    // 04 CHORUS / FLANGER — Rate/Depth Secondary, Mix/Width Tertiary
-    BoxToggle chorusModeToggle { "CHORUS", "FLANGER" };
-    BoxToggle chorusOnToggle { "OFF", "ON" };
-    ArcKnob chorusRate  { "RATE",  ArcKnob::Format::Hz,     ArcKnob::Tier::Secondary };
-    ArcKnob chorusDepth { "DEPTH", ArcKnob::Format::Float2, ArcKnob::Tier::Secondary };
-    ArcKnob chorusMix   { "MIX",   ArcKnob::Format::Float2, ArcKnob::Tier::Tertiary };
-    ArcKnob chorusWidth { "WIDTH", ArcKnob::Format::Float2, ArcKnob::Tier::Tertiary };
+    Knob detuneKnob { "CENTS", Knob::Format::Cents, BigDawgColors::stDetune };
+
+    // 03 BITCRUSH
+    Knob bitcrushBitsKnob { "BITS", Knob::Format::Float2, BigDawgColors::stBitcrush };
+    Knob bitcrushRateKnob { "RATE", Knob::Format::Float2, BigDawgColors::stBitcrush };
+
+    // 04 CHORUS / FLANGER
+    BoxToggle chorusOnToggle    { "OFF", "ON" };
+    BoxToggle chorusModeToggle  { "CHO", "FLG" };
     BoxToggle chorusShapeToggle { "SINE", "TRI" };
-    // 05 VIBRATO — Rate/Depth Secondary
+    Knob chorusRate  { "RATE",  Knob::Format::Hz,     BigDawgColors::stChorus };
+    Knob chorusDepth { "DEPTH", Knob::Format::Float2, BigDawgColors::stChorus };
+    Knob chorusMix   { "MIX",   Knob::Format::Float2, BigDawgColors::stChorus };
+    Knob chorusWidth { "WIDTH", Knob::Format::Float2, BigDawgColors::stChorus };
+
+    // 05 VIBRATO
     BoxToggle vibratoOnToggle { "OFF", "ON" };
-    ArcKnob vibratoRate  { "RATE",  ArcKnob::Format::Hz,     ArcKnob::Tier::Secondary };
-    ArcKnob vibratoDepth { "DEPTH", ArcKnob::Format::Float2, ArcKnob::Tier::Secondary };
-    // 06 WOW — Secondary (signature Viceroy element)
-    ArcKnob wowFlutter { "AMOUNT", ArcKnob::Format::Float2, ArcKnob::Tier::Secondary };
-    // 07 REVERB — Mix Primary, Tone Tertiary
-    BoxToggle reverbModeToggle { juce::StringArray{ "SPRING", "SLAP", "PLATE" } };
-    BoxToggle reverbOnToggle { "OFF", "ON" };
-    ArcKnob reverbMix  { "MIX",  ArcKnob::Format::Float2,  ArcKnob::Tier::Primary };
-    ArcKnob reverbTone { "TONE", ArcKnob::Format::Bipolar, ArcKnob::Tier::Tertiary };
-    // OUT — Primary
-    ArcKnob outputTrim { "TRIM", ArcKnob::Format::DB, ArcKnob::Tier::Primary };
+    Knob vibratoRate  { "RATE",  Knob::Format::Hz,     BigDawgColors::stVibrato };
+    Knob vibratoDepth { "DEPTH", Knob::Format::Float2, BigDawgColors::stVibrato };
+
+    // 06 WOW
+    Knob wowFlutter { "AMOUNT", Knob::Format::Float2, BigDawgColors::stWow };
+
+    // 07 SPRING
+    BoxToggle reverbOnToggle    { "OFF", "ON" };
+    BoxToggle reverbModeToggle  { juce::StringArray{ "SPR", "SLP", "PLT" } };
+    Knob reverbMix  { "MIX",  Knob::Format::Float2,  BigDawgColors::stSpring };
+    Knob reverbTone { "TONE", Knob::Format::Bipolar, BigDawgColors::stSpring };
+
+    // 08 EQ — placeholder for v0.2.1 wiring; no controls in v0.2.0.
+
+    // OUT
+    Knob outputTrim { "TRIM", Knob::Format::DB, BigDawgColors::stOut };
 
     using SA = juce::AudioProcessorValueTreeState::SliderAttachment;
     std::unique_ptr<SA> driveAtt, detuneAtt,
@@ -235,11 +265,6 @@ private:
     std::unique_ptr<ChoiceToggleAttachment> chorusShapeAtt;
     std::unique_ptr<ChoiceToggleAttachment> chorusModeAtt;
     std::unique_ptr<ChoiceToggleAttachment> reverbModeAtt;
-
-    // Top bar — global mode (HI-FI scales lo-fi stages down at DSP boundary).
-    BoxToggle hifiToggle { "LO-FI", "HI-FI" };
-
-    PresetStepper presetStepper;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DemarcoToneEditor)
 };

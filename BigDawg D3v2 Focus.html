@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BIG DAWG. v0.2.0 · D3v2 Vignelli-Correct</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; min-height: 100%; background: #DDDED4; font-family: 'IBM Plex Mono', ui-monospace, monospace; color: #1A1A1A; }
+  * { box-sizing: border-box; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 36px 24px 80px; }
+  .meta { font-size: 11px; letter-spacing: 0.18em; opacity: 0.55; margin-bottom: 6px; }
+  h1 { font-family: 'Archivo Black', sans-serif; font-size: 26px; letter-spacing: 0.005em; margin: 0 0 4px; }
+  .sub { font-size: 11px; opacity: 0.7; margin-bottom: 28px; }
+  .label { font-family: 'Archivo Black', sans-serif; font-size: 13px; letter-spacing: 0.04em; margin: 28px 0 10px; }
+  .label .tag { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 0.18em; opacity: 0.55; margin-left: 10px; font-weight: 400; }
+  .frame { box-shadow: 0 1px 0 rgba(0,0,0,0.04); }
+  a.back { display: inline-block; font-size: 10px; letter-spacing: 0.18em; color: #1A1A1A; border: 1.5px solid #1A1A1A; padding: 6px 12px; text-decoration: none; margin-bottom: 24px; }
+  a.back:hover { background: #1A1A1A; color: #E8E9E0; }
+  .notes { background: #E8E9E0; border: 1.5px solid #1A1A1A; padding: 16px 20px; font-size: 11px; line-height: 1.6; max-width: 1000px; margin-top: 28px; }
+  .notes h3 { font-family: 'Archivo Black', sans-serif; font-size: 14px; letter-spacing: 0.02em; margin: 0 0 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="BigDawg Vignelli Directions.html">‹ ALL DIRECTIONS</a>
+
+  <div class="meta">ROUND 2 · DIRECTION 3 v2</div>
+  <h1>VIGNELLI-CORRECT</h1>
+  <div class="sub">Color in the line, ink-square endpoints, bypass-aware diagram, standardized knob grid.</div>
+
+  <div class="label">A · ALL STAGES ACTIVE <span class="tag">1000 × 350</span></div>
+  <div id="state-active" class="frame"></div>
+
+  <div class="label">B · BITCRUSH + VIBRATO BYPASSED <span class="tag">gray-segment treatment</span></div>
+  <div id="state-bypassed" class="frame"></div>
+
+  <div class="notes">
+    <h3>WHAT CHANGED FROM ROUND 1</h3>
+    • Single 10px line, 8 colored segments meeting at boundaries · 1px ink hairline ticks at transitions · no station dots.<br/>
+    • Endpoints: 12×12 ink squares (IN, OUT) — symmetric flowchart-terminator grammar.<br/>
+    • Stage labels (DRIVE, DETUNE…) below the line, IBM Plex Mono small caps, with 01–08 sub-numbers at half opacity.<br/>
+    • Bypass-aware: a stage's segment desaturates to neutral gray (#B5B5AE) when its OFF/ON pill is OFF. Top stripe and label dim in lockstep so chain-state reads as one piece.<br/>
+    • Knobs: D2 white-disc + colored indicator. Three-line cell: knob · LABEL (Plex Mono caps) · tabular value (3.00 Hz, −25 c, 0.45). <code>font-variant-numeric: tabular-nums lining-nums</code>.<br/>
+    • SAT/PCH/MOD/TIM/UTL category abbreviations dropped — top stripe color encodes category.<br/>
+    • Knob grid is fixed 3-column. Stages with 2 knobs reserve the 3rd slot empty so columns never go ragged.
+  </div>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="tokens.jsx"></script>
+<script type="text/babel" src="dir3-v2.jsx"></script>
+
+<script type="text/babel">
+ReactDOM.createRoot(document.getElementById('state-active'))
+  .render(<window.Dir3v2_Plugin bypassed={[]} />);
+ReactDOM.createRoot(document.getElementById('state-bypassed'))
+  .render(<window.Dir3v2_Plugin bypassed={['BITCRUSH', 'VIBRATO']} />);
+</script>
+</body>
+</html>

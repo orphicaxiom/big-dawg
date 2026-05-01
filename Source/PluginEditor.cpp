@@ -32,39 +32,33 @@ juce::Font BigDawgLookAndFeel::makeMonoFont(float heightPx, bool bold)
     return f;
 }
 
+juce::Font BigDawgLookAndFeel::makeMonoTabularFont(float heightPx)
+{
+    // Plex Mono is monospaced, so digits already align at the same width;
+    // tabular figures are implicit. Function exists for intent labelling.
+    return makeMonoFont(heightPx, false);
+}
+
 // ---------------------------------------------------------------------------
-// ArcKnob
+// Knob
 // ---------------------------------------------------------------------------
-ArcKnob::ArcKnob(const juce::String& label, Format fmt, Tier t)
-    : nameLabel(label), format(fmt), tier(t)
+Knob::Knob(const juce::String& label, Format fmt, juce::Colour stage)
+    : nameLabel(label), format(fmt), stageColour(stage)
 {
     setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    setRotaryParameters(juce::MathConstants<float>::pi * 1.25f,   // 7 o'clock
-                        juce::MathConstants<float>::pi * 2.75f,   // 5 o'clock
+    setRotaryParameters(juce::MathConstants<float>::pi * 1.25f,   // 7:30 (mirrored: -135°)
+                        juce::MathConstants<float>::pi * 2.75f,   // 4:30 (+135°)
                         true);
-    setColour(juce::Slider::rotarySliderFillColourId, tierColour());
-    setColour(juce::Slider::rotarySliderOutlineColourId, ink);
     setColour(juce::Slider::textBoxTextColourId, ink);
 }
 
-juce::Colour ArcKnob::tierColour() const
-{
-    switch (tier)
-    {
-        case Tier::Primary:   return redPrimary;
-        case Tier::Secondary: return redSecondary;
-        case Tier::Tertiary:  return redTertiary;
-    }
-    return redPrimary;
-}
-
-double ArcKnob::currentDisplayValue() const
+double Knob::currentDisplayValue() const
 {
     return overrideActive ? (double)overrideValue : getValue();
 }
 
-void ArcKnob::setVisualOverride(bool active, float v)
+void Knob::setVisualOverride(bool active, float v)
 {
     if (overrideActive == active && std::abs(overrideValue - v) < 1e-4f)
         return;
@@ -73,7 +67,7 @@ void ArcKnob::setVisualOverride(bool active, float v)
     repaint();
 }
 
-juce::String ArcKnob::formatValue() const
+juce::String Knob::formatValue() const
 {
     const double v = currentDisplayValue();
     switch (format)
@@ -88,82 +82,64 @@ juce::String ArcKnob::formatValue() const
     }
 }
 
-void ArcKnob::paint(juce::Graphics& g)
+void Knob::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
+
     const float labelH = 12.0f;
     const float valueH = 12.0f;
+    const float gap    = 2.0f;
 
-    // Reduced opacity when displaying a hi-fi-derived value, signalling
-    // "not your input — this is what the mode is doing."
-    const float alpha   = overrideActive ? 0.55f : 1.0f;
-    const auto  textInk = ink.withMultipliedAlpha(alpha);
-
-    // Label above
-    g.setColour(textInk);
-    g.setFont(BigDawgLookAndFeel::makeMonoFont(10.0f, true));
-    g.drawFittedText(nameLabel.toUpperCase(),
-                     bounds.removeFromTop(labelH).toNearestInt(),
-                     juce::Justification::centred, 1);
-
-    // Value below
+    // Reserve the bottom rows for label + value, leaving the rest for the disc.
     auto valueBox = bounds.removeFromBottom(valueH);
-    g.setColour(textInk);
-    g.setFont(BigDawgLookAndFeel::makeMonoFont(10.0f, false));
-    g.drawFittedText(formatValue(),
-                     valueBox.toNearestInt(),
-                     juce::Justification::centred, 1);
+    bounds.removeFromBottom(gap);
+    auto labelBox = bounds.removeFromBottom(labelH);
+    bounds.removeFromBottom(gap);
+    auto knobBox  = bounds;
 
-    // Arc area (square, centered)
-    const float side = std::min(bounds.getWidth(), bounds.getHeight()) - 4.0f;
-    auto arcArea = juce::Rectangle<float>(side, side).withCentre(bounds.getCentre());
+    // Disc geometry — paper fill, 1.5px ink outline, fits within knobBox.
+    const float diameter = std::min(knobBox.getWidth(), knobBox.getHeight()) - 4.0f;
+    auto circle = juce::Rectangle<float>(diameter, diameter)
+                      .withCentre(knobBox.getCentre());
 
-    const float cx = arcArea.getCentreX();
-    const float cy = arcArea.getCentreY();
-    const float radius = side * 0.5f - 2.0f;
+    g.setColour(panelLight);
+    g.fillEllipse(circle);
+    g.setColour(ink);
+    g.drawEllipse(circle, 1.5f);
 
-    const float startAngle = juce::MathConstants<float>::pi * 1.25f;
-    const float endAngle   = juce::MathConstants<float>::pi * 2.75f;
+    // Indicator line in stage colour. -135° (min) to +135° (max), with 0° = up.
+    const float r  = diameter * 0.5f;
+    const float cx = circle.getCentreX();
+    const float cy = circle.getCentreY();
 
     const double range = getMaximum() - getMinimum();
     const double dispV = currentDisplayValue();
     const double norm  = range > 0.0 ? (dispV - getMinimum()) / range : 0.0;
-    const float valAngle = startAngle + (float)norm * (endAngle - startAngle);
+    const float angle  = juce::MathConstants<float>::pi * (-0.75f + 1.5f * (float)norm);
 
-    // Ink track
-    juce::Path track;
-    track.addCentredArc(cx, cy, radius, radius, 0.0f,
-                        startAngle, endAngle, true);
-    g.setColour(ink.withMultipliedAlpha(alpha));
-    g.strokePath(track, juce::PathStrokeType(1.5f));
+    const float indLen = r * 0.78f;
+    const float ix = cx + std::sin(angle) * indLen;
+    const float iy = cy - std::cos(angle) * indLen;
 
-    // Red value arc — for bipolar params, draw from center (mid-angle), else from start.
-    juce::Path valueArc;
-    if (format == Format::Bipolar || (getMinimum() < 0.0 && getMaximum() > 0.0))
-    {
-        const double midNorm = -getMinimum() / range;
-        const float midAngle = startAngle + (float)midNorm * (endAngle - startAngle);
-        if (valAngle >= midAngle)
-            valueArc.addCentredArc(cx, cy, radius, radius, 0.0f,
-                                   midAngle, valAngle, true);
-        else
-            valueArc.addCentredArc(cx, cy, radius, radius, 0.0f,
-                                   valAngle, midAngle, true);
-    }
-    else
-    {
-        valueArc.addCentredArc(cx, cy, radius, radius, 0.0f,
-                               startAngle, valAngle, true);
-    }
-    const auto accent = tierColour().withMultipliedAlpha(alpha);
-    g.setColour(accent);
-    g.strokePath(valueArc, juce::PathStrokeType(2.5f));
+    // Reduced opacity when displaying a hi-fi-derived value.
+    const float alpha = overrideActive ? 0.55f : 1.0f;
 
-    // Small tick at the indicator position
-    const float tx = cx + std::cos(valAngle - juce::MathConstants<float>::halfPi) * radius;
-    const float ty = cy + std::sin(valAngle - juce::MathConstants<float>::halfPi) * radius;
-    g.setColour(accent);
-    g.fillEllipse(tx - 2.0f, ty - 2.0f, 4.0f, 4.0f);
+    g.setColour(stageColour.withMultipliedAlpha(alpha));
+    g.drawLine(cx, cy, ix, iy, 2.5f);
+
+    // Label + value
+    const auto textInk = ink.withMultipliedAlpha(alpha);
+    g.setColour(textInk);
+    g.setFont(BigDawgLookAndFeel::makeMonoFont(9.5f, true));
+    g.drawFittedText(nameLabel.toUpperCase(),
+                     labelBox.toNearestInt(),
+                     juce::Justification::centred, 1);
+
+    g.setColour(textInk);
+    g.setFont(BigDawgLookAndFeel::makeMonoTabularFont(9.5f));
+    g.drawFittedText(formatValue(),
+                     valueBox.toNearestInt(),
+                     juce::Justification::centred, 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +179,7 @@ void BoxToggle::paint(juce::Graphics& g)
     auto bounds = getLocalBounds().toFloat().reduced(0.5f);
     const float cellW = bounds.getWidth() / (float)n;
 
-    g.setFont(BigDawgLookAndFeel::makeMonoFont(10.0f, true));
+    g.setFont(BigDawgLookAndFeel::makeMonoFont(9.5f, true));
 
     for (int i = 0; i < n; ++i)
     {
@@ -217,7 +193,7 @@ void BoxToggle::paint(juce::Graphics& g)
         }
         else
         {
-            g.setColour(paper);
+            g.setColour(panelLight);
             g.fillRect(box);
             g.setColour(ink);
             g.drawRect(box, 1.5f);
@@ -244,7 +220,6 @@ ChoiceToggleAttachment::ChoiceToggleAttachment(juce::AudioProcessorValueTreeStat
     {
         if (auto* p = apvts.getParameter(id))
         {
-            // AudioParameterChoice range is 0..numChoices-1; convert v to 0..1.
             const float num = juce::jmax(1.0f, (float)p->getNormalisableRange().end);
             p->setValueNotifyingHost((float)v / num);
         }
@@ -292,104 +267,241 @@ void BoolToggleAttachment::parameterChanged(const juce::String&, float newValue)
 }
 
 // ---------------------------------------------------------------------------
-// PresetStepper — "< VICEROY >" clickable
+// SignalDiagram
 // ---------------------------------------------------------------------------
-PresetStepper::PresetStepper() { setInterceptsMouseClicks(true, false); }
-
-void PresetStepper::setPresets(const juce::StringArray& n)
+SignalDiagram::SignalDiagram(DemarcoToneProcessor& p) : proc(p)
 {
-    names = n;
-    if (index >= names.size()) index = juce::jmax(0, names.size() - 1);
-    repaint();
+    startTimerHz(30);
 }
 
-void PresetStepper::setCurrentIndex(int i)
-{
-    if (names.isEmpty()) return;
-    index = juce::jlimit(0, names.size() - 1, i);
-    repaint();
-}
+SignalDiagram::~SignalDiagram() = default;
 
-juce::Rectangle<int> PresetStepper::leftHit() const
+void SignalDiagram::timerCallback()
 {
-    return getLocalBounds().removeFromLeft(18);
-}
-
-juce::Rectangle<int> PresetStepper::rightHit() const
-{
-    auto r = getLocalBounds();
-    return r.removeFromRight(18);
-}
-
-void PresetStepper::mouseDown(const juce::MouseEvent& e)
-{
-    if (names.isEmpty()) return;
-
-    // Chevrons cycle prev / next.
-    if (leftHit().contains(e.getPosition()) || rightHit().contains(e.getPosition()))
+    auto& apvts = proc.getAPVTS();
+    auto isOff = [&apvts](const juce::String& id) -> bool
     {
-        const int step = leftHit().contains(e.getPosition()) ? -1 : 1;
-        const int newIndex = (index + step + names.size()) % names.size();
-        if (newIndex != index)
-        {
-            index = newIndex;
-            repaint();
-            if (onSelect) onSelect(index);
-        }
-        return;
+        if (auto* raw = apvts.getRawParameterValue(id))
+            return raw->load() < 0.5f; // < 0.5 = OFF / bypassed
+        return false;
+    };
+
+    std::array<bool, 8> now {
+        false,                            // 01 Drive       (no APVTS bypass)
+        isOff(ParamID::detuneOn),         // 02 Detune
+        false,                            // 03 Bitcrush    (transparent-values bypass; not tracked)
+        isOff(ParamID::chorusOn),         // 04 Chorus
+        isOff(ParamID::vibratoOn),        // 05 Vibrato
+        false,                            // 06 Wow
+        isOff(ParamID::reverbOn),         // 07 Spring
+        false                             // 08 EQ          (placeholder)
+    };
+
+    if (now != bypassedLastSeen)
+    {
+        bypassedLastSeen = now;
+        repaint();
+    }
+}
+
+void SignalDiagram::paint(juce::Graphics& g)
+{
+    const float marginX       = 16.0f;
+    const float endpointSize  = 12.0f;
+    const float lineThickness = 10.0f;
+    const float tickHeight    = 16.0f;   // 3 above + 10 line + 3 below
+
+    auto bounds = getLocalBounds().toFloat();
+
+    // Line vertical position — leaves room below for sub-numbers + labels.
+    const float lineTop    = bounds.getY() + 14.0f;
+    const float lineCenter = lineTop + lineThickness * 0.5f;
+
+    const float xStart = bounds.getX() + marginX;
+    const float xEnd   = bounds.getRight() - marginX;
+    const float spanW  = xEnd - xStart;
+    const float segW   = spanW / 8.0f;
+
+    // 12×12 ink endpoint squares (IN, OUT) centered on the line.
+    g.setColour(ink);
+    g.fillRect(xStart - endpointSize * 0.5f,
+               lineCenter - endpointSize * 0.5f,
+               endpointSize, endpointSize);
+    g.fillRect(xEnd - endpointSize * 0.5f,
+               lineCenter - endpointSize * 0.5f,
+               endpointSize, endpointSize);
+
+    // 8 colored segments meeting at boundaries.
+    const std::array<juce::Colour, 8> stageColours = {
+        stDrive, stDetune, stBitcrush, stChorus,
+        stVibrato, stWow, stSpring, stEQ
+    };
+    const std::array<juce::String, 8> stageLabels = {
+        "DRIVE", "DETUNE", "BITCRUSH", "CHORUS",
+        "VIBRATO", "WOW", "SPRING", "EQ"
+    };
+    const std::array<juce::String, 8> stageNumbers = {
+        "01", "02", "03", "04", "05", "06", "07", "08"
+    };
+
+    for (size_t i = 0; i < 8; ++i)
+    {
+        const float segX = xStart + (float)i * segW;
+        const auto col = bypassedLastSeen[i] ? bypass : stageColours[i];
+        g.setColour(col);
+        g.fillRect(segX, lineTop, segW, lineThickness);
     }
 
-    // Click on the label area → popup menu listing all presets.
-    juce::PopupMenu menu;
-    for (int i = 0; i < names.size(); ++i)
-        menu.addItem(i + 1, names[i], true, i == index);
-
-    juce::Component::SafePointer<PresetStepper> safe(this);
-    menu.showMenuAsync(
-        juce::PopupMenu::Options().withTargetComponent(this),
-        [safe](int result)
-        {
-            if (safe == nullptr || result <= 0) return;
-            const int newIdx = result - 1;
-            if (newIdx != safe->index)
-            {
-                safe->index = newIdx;
-                safe->repaint();
-                if (safe->onSelect) safe->onSelect(newIdx);
-            }
-        });
-}
-
-void PresetStepper::paint(juce::Graphics& g)
-{
-    auto r = getLocalBounds();
-
+    // 7 hairline ticks at segment boundaries.
     g.setColour(ink);
-    g.setFont(BigDawgLookAndFeel::makeMonoFont(11.0f, true));
+    for (int i = 1; i < 8; ++i)
+    {
+        const float tx = xStart + (float)i * segW;
+        g.fillRect(tx - 0.5f, lineTop - 3.0f, 1.0f, tickHeight);
+    }
 
-    // Left chevron
-    auto left = r.removeFromLeft(18);
-    g.drawFittedText("<", left, juce::Justification::centred, 1);
+    // Sub-numbers (9px) at 50% opacity, then stage labels (9.5px bold) below.
+    const float subY   = lineTop + lineThickness + 6.0f;
+    const float labelY = subY + 11.0f;
 
-    // Right chevron
-    auto right = r.removeFromRight(18);
-    g.drawFittedText(">", right, juce::Justification::centred, 1);
+    for (size_t i = 0; i < 8; ++i)
+    {
+        const float segCx    = xStart + (float)i * segW + segW * 0.5f;
+        const float dimAlpha = bypassedLastSeen[i] ? 0.4f : 1.0f;
 
-    // Label
-    const juce::String label = names.isEmpty() ? juce::String("—")
-                                                : names[index].toUpperCase();
-    g.drawFittedText(label, r, juce::Justification::centred, 1);
+        g.setColour(ink.withMultipliedAlpha(0.5f * dimAlpha));
+        g.setFont(BigDawgLookAndFeel::makeMonoFont(8.0f, false));
+        g.drawFittedText(stageNumbers[i],
+                         juce::Rectangle<float>(segCx - 30.0f, subY, 60.0f, 10.0f).toNearestInt(),
+                         juce::Justification::centred, 1);
+
+        g.setColour(ink.withMultipliedAlpha(dimAlpha));
+        g.setFont(BigDawgLookAndFeel::makeMonoFont(9.5f, true));
+        g.drawFittedText(stageLabels[i],
+                         juce::Rectangle<float>(segCx - 60.0f, labelY, 120.0f, 12.0f).toNearestInt(),
+                         juce::Justification::centred, 1);
+    }
 }
 
 // ---------------------------------------------------------------------------
-// Editor
+// PresetSelector
+// ---------------------------------------------------------------------------
+PresetSelector::PresetSelector(DemarcoToneProcessor& p) : proc(p)
+{
+    setInterceptsMouseClicks(true, false);
+}
+
+void PresetSelector::refresh() { repaint(); }
+
+juce::Rectangle<int> PresetSelector::leftChevronRect() const
+{
+    // < character sits left of the name; total span ≈ width of bounds.
+    auto b = getLocalBounds();
+    const int chevW = 18;
+    return { b.getX() + 110, b.getY(), chevW, b.getHeight() };
+}
+
+juce::Rectangle<int> PresetSelector::rightChevronRect() const
+{
+    auto b = getLocalBounds();
+    const int chevW = 18;
+    return { b.getRight() - chevW, b.getY(), chevW, b.getHeight() };
+}
+
+juce::Rectangle<int> PresetSelector::nameRect() const
+{
+    auto b = getLocalBounds();
+    return { b.getX() + 132, b.getY(), b.getWidth() - 132 - 22, b.getHeight() };
+}
+
+void PresetSelector::paint(juce::Graphics& g)
+{
+    const int curIdx = proc.getCurrentPresetIndex();
+    const auto names = proc.getPresetNames();
+    const int total = juce::jmax(1, names.size());
+
+    auto b = getLocalBounds();
+
+    // Left text block: V0.1   PRESET 03/05
+    g.setColour(ink);
+    g.setFont(BigDawgLookAndFeel::makeMonoFont(10.0f, false));
+    g.drawFittedText("V0.1",
+                     juce::Rectangle<int>(b.getX(), b.getY(), 28, b.getHeight()),
+                     juce::Justification::centredLeft, 1);
+
+    g.setFont(BigDawgLookAndFeel::makeMonoFont(10.0f, true));
+    g.drawFittedText("PRESET",
+                     juce::Rectangle<int>(b.getX() + 32, b.getY(), 48, b.getHeight()),
+                     juce::Justification::centredLeft, 1);
+
+    g.setFont(BigDawgLookAndFeel::makeMonoTabularFont(10.0f));
+    juce::String idx;
+    idx << juce::String(curIdx + 1).paddedLeft('0', (size_t)2)
+        << "/"
+        << juce::String(total).paddedLeft('0', (size_t)2);
+    g.drawFittedText(idx,
+                     juce::Rectangle<int>(b.getX() + 82, b.getY(), 28, b.getHeight()),
+                     juce::Justification::centredLeft, 1);
+
+    // Chevrons (Plex Mono)
+    g.setFont(BigDawgLookAndFeel::makeMonoFont(13.0f, false));
+    g.drawFittedText("<", leftChevronRect(),  juce::Justification::centred, 1);
+    g.drawFittedText(">", rightChevronRect(), juce::Justification::centred, 1);
+
+    // Preset name (Archivo Black, all caps)
+    g.setFont(BigDawgLookAndFeel::makeDisplayFont(13.0f));
+    juce::String name = names[juce::jlimit(0, total - 1, curIdx)].toUpperCase();
+    g.drawFittedText(name, nameRect(), juce::Justification::centred, 1);
+}
+
+void PresetSelector::mouseDown(const juce::MouseEvent& e)
+{
+    const auto names = proc.getPresetNames();
+    if (names.isEmpty()) return;
+    const int curIdx = proc.getCurrentPresetIndex();
+    const int total = names.size();
+
+    if (leftChevronRect().contains(e.getPosition()))
+    {
+        const int newIdx = (curIdx - 1 + total) % total;
+        proc.loadPreset(newIdx);
+        repaint();
+        return;
+    }
+    if (rightChevronRect().contains(e.getPosition()))
+    {
+        const int newIdx = (curIdx + 1) % total;
+        proc.loadPreset(newIdx);
+        repaint();
+        return;
+    }
+    if (nameRect().contains(e.getPosition()))
+    {
+        juce::PopupMenu menu;
+        for (int i = 0; i < names.size(); ++i)
+            menu.addItem(i + 1, names[i], true, i == curIdx);
+
+        juce::Component::SafePointer<PresetSelector> safe(this);
+        menu.showMenuAsync(
+            juce::PopupMenu::Options().withTargetComponent(this),
+            [safe](int result)
+            {
+                if (safe == nullptr || result <= 0) return;
+                safe->proc.loadPreset(result - 1);
+                safe->repaint();
+            });
+    }
+}
+
+// ---------------------------------------------------------------------------
+// DemarcoToneEditor
 // ---------------------------------------------------------------------------
 DemarcoToneEditor::DemarcoToneEditor(DemarcoToneProcessor& p)
     : AudioProcessorEditor(&p), proc(p)
 {
     setLookAndFeel(&lnf);
 
-    auto addKnob = [this](ArcKnob& k)
+    auto addKnob = [this](Knob& k)
     {
         k.setLookAndFeel(&lnf);
         addAndMakeVisible(k);
@@ -411,18 +523,20 @@ DemarcoToneEditor::DemarcoToneEditor(DemarcoToneProcessor& p)
     addKnob(outputTrim);
 
     addAndMakeVisible(detuneOnToggle);
-    addAndMakeVisible(chorusModeToggle);
     addAndMakeVisible(chorusOnToggle);
+    addAndMakeVisible(chorusModeToggle);
     addAndMakeVisible(chorusShapeToggle);
     addAndMakeVisible(vibratoOnToggle);
-    addAndMakeVisible(reverbModeToggle);
     addAndMakeVisible(reverbOnToggle);
+    addAndMakeVisible(reverbModeToggle);
     addAndMakeVisible(hifiToggle);
 
-    // Detune — double-click to zero
+    addAndMakeVisible(presetSelector);
+    addAndMakeVisible(diagram);
+
     detuneKnob.setDoubleClickReturnValue(true, 0.0);
 
-    // Parameter attachments
+    // Parameter attachments — unchanged from v0.1.x; APVTS bindings preserved.
     auto& apvts = proc.getAPVTS();
     driveAtt        = std::make_unique<SA>(apvts, ParamID::drive,        driveKnob);
     detuneAtt       = std::make_unique<SA>(apvts, ParamID::detune,       detuneKnob);
@@ -439,61 +553,20 @@ DemarcoToneEditor::DemarcoToneEditor(DemarcoToneProcessor& p)
     reverbToneAtt   = std::make_unique<SA>(apvts, ParamID::reverbTone,   reverbTone);
     outputTrimAtt   = std::make_unique<SA>(apvts, ParamID::outputTrim,   outputTrim);
 
-    detuneOnAtt  = std::make_unique<BoolToggleAttachment>(
-        apvts, ParamID::detuneOn,  detuneOnToggle);
-    chorusOnAtt  = std::make_unique<BoolToggleAttachment>(
-        apvts, ParamID::chorusOn,  chorusOnToggle);
-    vibratoOnAtt = std::make_unique<BoolToggleAttachment>(
-        apvts, ParamID::vibratoOn, vibratoOnToggle);
-    reverbOnAtt  = std::make_unique<BoolToggleAttachment>(
-        apvts, ParamID::reverbOn,  reverbOnToggle);
-    hifiAtt      = std::make_unique<BoolToggleAttachment>(
-        apvts, ParamID::hifiMode,  hifiToggle);
-    chorusShapeAtt = std::make_unique<ChoiceToggleAttachment>(
-        apvts, ParamID::chorusShape, chorusShapeToggle);
-    chorusModeAtt  = std::make_unique<ChoiceToggleAttachment>(
-        apvts, ParamID::chorusMode,  chorusModeToggle);
-    reverbModeAtt  = std::make_unique<ChoiceToggleAttachment>(
-        apvts, ParamID::reverbMode,  reverbModeToggle);
+    detuneOnAtt  = std::make_unique<BoolToggleAttachment>(apvts, ParamID::detuneOn,  detuneOnToggle);
+    chorusOnAtt  = std::make_unique<BoolToggleAttachment>(apvts, ParamID::chorusOn,  chorusOnToggle);
+    vibratoOnAtt = std::make_unique<BoolToggleAttachment>(apvts, ParamID::vibratoOn, vibratoOnToggle);
+    reverbOnAtt  = std::make_unique<BoolToggleAttachment>(apvts, ParamID::reverbOn,  reverbOnToggle);
+    hifiAtt      = std::make_unique<BoolToggleAttachment>(apvts, ParamID::hifiMode,  hifiToggle);
 
-    // Preset stepper
-    addAndMakeVisible(presetStepper);
-    presetStepper.setPresets(proc.getPresetNames());
-    presetStepper.setCurrentIndex(proc.getCurrentPresetIndex());
-    presetStepper.onSelect = [this](int idx) { proc.loadPreset(idx); repaint(); };
+    chorusShapeAtt = std::make_unique<ChoiceToggleAttachment>(apvts, ParamID::chorusShape, chorusShapeToggle);
+    chorusModeAtt  = std::make_unique<ChoiceToggleAttachment>(apvts, ParamID::chorusMode,  chorusModeToggle);
+    reverbModeAtt  = std::make_unique<ChoiceToggleAttachment>(apvts, ParamID::reverbMode,  reverbModeToggle);
 
-    setSize(840, 240);
+    setSize(1000, 350);
     setResizable(false, false);
 
-    // Hi-fi visual sync — 30 Hz is more than enough for state changes.
-    startTimerHz(30);
-}
-
-void DemarcoToneEditor::timerCallback()
-{
-    auto& apvts = proc.getAPVTS();
-    auto getF = [&apvts](const juce::String& id) -> float
-    {
-        if (auto* raw = apvts.getRawParameterValue(id))
-            return raw->load();
-        return 0.0f;
-    };
-
-    const bool hifi = getF(ParamID::hifiMode) >= 0.5f;
-
-    auto applyOverride = [hifi](ArcKnob& k, float scaled)
-    {
-        k.setVisualOverride(hifi, scaled);
-        k.setEnabled(!hifi);
-    };
-
-    applyOverride(driveKnob,        getF(ParamID::drive)        * HifiScale::drive);
-    applyOverride(detuneKnob,       getF(ParamID::detune)       * HifiScale::detune);
-    applyOverride(bitcrushBitsKnob, HifiScale::bitcrushBitsBypass);
-    applyOverride(bitcrushRateKnob, HifiScale::bitcrushRateBypass);
-    applyOverride(chorusMix,        getF(ParamID::chorusMix)    * HifiScale::chorusMix);
-    applyOverride(vibratoDepth,     getF(ParamID::vibratoDepth) * HifiScale::vibratoDepth);
-    applyOverride(wowFlutter,       getF(ParamID::wowFlutter)   * HifiScale::wow);
+    startTimerHz(30); // hi-fi visual sync
 }
 
 DemarcoToneEditor::~DemarcoToneEditor()
@@ -508,251 +581,290 @@ DemarcoToneEditor::~DemarcoToneEditor()
 }
 
 // ---------------------------------------------------------------------------
-void DemarcoToneEditor::paint(juce::Graphics& g)
+// Hi-fi visual sync (carries the v0.1.3 behavior into v0.2.0 knobs).
+// ---------------------------------------------------------------------------
+void DemarcoToneEditor::timerCallback()
 {
-    g.fillAll(paper);
-
-    // ---- Top bar ----
-    auto area = getLocalBounds();
-    auto topBar = area.removeFromTop(32);
-
-    g.setColour(ink);
-    // Left: BIG DAWG + red period
-    auto leftPad = topBar.reduced(14, 6);
-    auto displayFont = BigDawgLookAndFeel::makeDisplayFont(18.0f);
-    g.setFont(displayFont);
-    const juce::String brand = "BIG DAWG";
-    const int brandW = (int)std::ceil(juce::GlyphArrangement::getStringWidth(displayFont, brand));
-    g.drawFittedText(brand,
-                     leftPad.withWidth(brandW),
-                     juce::Justification::centredLeft, 1);
-    // Red period — brand mark always at full saturation
-    g.setColour(redPrimary);
-    auto periodBox = leftPad.withX(leftPad.getX() + brandW).withWidth(14);
-    g.drawFittedText(".", periodBox, juce::Justification::centredLeft, 1);
-
-    // Right: "V0.1" (static) + PresetStepper (its own child component,
-    // positioned in resized()).
-    g.setColour(ink);
-    g.setFont(BigDawgLookAndFeel::makeMonoFont(11.0f, false));
-    const int versionW = 40;
-    auto versionBox = juce::Rectangle<int>(
-        presetStepper.getX() - versionW - 8, 0, versionW, 32);
-    g.drawFittedText("V0.1", versionBox, juce::Justification::centredRight, 1);
-
-    // Hard rule under top bar
-    g.setColour(ink);
-    g.fillRect(0, 32, getWidth(), 1);
-
-    // ---- Section headers + hairline dividers ----
-    // 8 columns: 01 DRIVE, 02 DETUNE, 03 BITCRUSH, 04 CHORUS, 05 VIBRATO,
-    //            06 WOW, 07 REVERB, OUT. Total 840.
-    const int yContent = 33;
-    const int hContent = getHeight() - yContent;
-    const int widths[8] = { 70, 70, 80, 190, 140, 70, 160, 60 };
-    const juce::String nums[8]  = { "01", "02", "03", "04", "05", "06", "07", "OUT" };
-    // Name is empty where a header-band toggle replaces it (CHORUS / REVERB),
-    // and for the OUT column which already has no name.
-    const juce::String names[8] = { "DRIVE", "DETUNE", "BITCRUSH",
-                                    "", "VIBRATO", "WOW", "", "" };
-
-    int x = 0;
-    // Typography — Plex Mono (system mono fallback) across the board.
-    //   numeral  : 10px bold — matches param labels for visual rhythm
-    //   name     : 11px bold — slightly larger, the section's "headline"
-    auto numFont  = BigDawgLookAndFeel::makeMonoFont(10.0f, true);
-    auto nameFont = BigDawgLookAndFeel::makeMonoFont(11.0f, true);
-
-    for (int i = 0; i < 8; ++i)
+    auto& apvts = proc.getAPVTS();
+    auto getF = [&apvts](const juce::String& id) -> float
     {
-        auto col = juce::Rectangle<int>(x, yContent, widths[i], hContent);
+        if (auto* raw = apvts.getRawParameterValue(id))
+            return raw->load();
+        return 0.0f;
+    };
 
-        // Panel fill — 2% darker than paper. Leave 1px on the right edge
-        // (except last column) so the lighter paper shows through as a
-        // subtle inter-section gutter. No ink strokes.
-        g.setColour(panel);
-        g.fillRect(col.withTrimmedRight(i < 7 ? 1 : 0));
+    const bool hifi = getF(ParamID::hifiMode) >= 0.5f;
 
-        // Header band — 30px tall. 6px vertical padding gives 18px of
-        // text area: 10px numeral row + 2px gap + 6..13px name row (depending
-        // on what's left). For a 30-tall band reduced by (8,6) we get 18
-        // vertical → split into num(10) + nameRow(remainder, ~8px) which
-        // drawFittedText renders cleanly at 11px nominal.
-        auto header = col.withHeight(30).reduced(8, 6);
-        g.setColour(ink);
-        if (i < 7)
+    auto applyOverride = [hifi](Knob& k, float scaled)
+    {
+        k.setVisualOverride(hifi, scaled);
+        k.setEnabled(!hifi);
+    };
+
+    applyOverride(driveKnob,        getF(ParamID::drive)        * HifiScale::drive);
+    applyOverride(detuneKnob,       getF(ParamID::detune)       * HifiScale::detune);
+    applyOverride(bitcrushBitsKnob, HifiScale::bitcrushBitsBypass);
+    applyOverride(bitcrushRateKnob, HifiScale::bitcrushRateBypass);
+    applyOverride(chorusMix,        getF(ParamID::chorusMix)    * HifiScale::chorusMix);
+    applyOverride(vibratoDepth,     getF(ParamID::vibratoDepth) * HifiScale::vibratoDepth);
+    applyOverride(wowFlutter,       getF(ParamID::wowFlutter)   * HifiScale::wow);
+
+    presetSelector.refresh();
+}
+
+// ---------------------------------------------------------------------------
+// Layout — 1000×350, three-row stack
+// ---------------------------------------------------------------------------
+namespace { // local layout constants
+    constexpr int kWindowW   = 1000;
+    constexpr int kWindowH   = 350;
+    constexpr int kHeaderH   = 50;
+    constexpr int kDiagramH  = 70;
+    // stage grid = 230
+
+    constexpr int kSideMargin = 12;
+
+    // Stage stripe colours, by index (0..8)
+    inline juce::Colour stageStripeColour(int idx)
+    {
+        using namespace BigDawgColors;
+        switch (idx)
         {
-            // numeral on top-left, then name directly below (unless the
-            // header is hosting a mode toggle — CHORUS / REVERB).
-            auto numBox = header.removeFromTop(10);
-            g.setFont(numFont);
-            g.drawFittedText(nums[i], numBox, juce::Justification::topLeft, 1);
-
-            if (names[i].isNotEmpty())
-            {
-                g.setFont(nameFont);
-                g.drawFittedText(names[i], header,
-                                 juce::Justification::topLeft, 1);
-            }
+            case 0: return stDrive;
+            case 1: return stDetune;
+            case 2: return stBitcrush;
+            case 3: return stChorus;
+            case 4: return stVibrato;
+            case 5: return stWow;
+            case 6: return stSpring;
+            case 7: return stEQ;
+            case 8: return stOut;
+            default: return BigDawgColors::ink;
         }
-        else
-        {
-            // OUT section — single label in the full header area
-            g.setFont(nameFont);
-            g.drawFittedText(nums[i], header,
-                             juce::Justification::topLeft, 1);
-        }
+    }
 
-        x += widths[i];
+    inline const char* stageNumber(int idx)
+    {
+        static const char* nums[] = { "01","02","03","04","05","06","07","08","" };
+        return idx >= 0 && idx < 9 ? nums[idx] : "";
+    }
+    inline const char* stageName(int idx)
+    {
+        static const char* nms[] = { "DRIVE","DETUNE","BITCRUSH","CHORUS",
+                                      "VIBRATO","WOW","SPRING","EQ","OUT" };
+        return idx >= 0 && idx < 9 ? nms[idx] : "";
     }
 }
 
 // ---------------------------------------------------------------------------
+void DemarcoToneEditor::paint(juce::Graphics& g)
+{
+    g.fillAll(paper);
+
+    // ── Header: wordmark + bottom rule ───────────────────────────────────
+    auto displayFont = BigDawgLookAndFeel::makeDisplayFont(22.0f);
+    g.setFont(displayFont);
+    const juce::String brand = "BIG DAWG";
+    const int brandW = (int)std::ceil(juce::GlyphArrangement::getStringWidth(displayFont, brand));
+
+    g.setColour(ink);
+    g.drawFittedText(brand,
+                     juce::Rectangle<int>(kSideMargin + 2, 0, brandW, kHeaderH),
+                     juce::Justification::centredLeft, 1);
+
+    g.setColour(stDrive); // Olivetti red period
+    g.drawFittedText(".",
+                     juce::Rectangle<int>(kSideMargin + 2 + brandW, 0, 14, kHeaderH),
+                     juce::Justification::centredLeft, 1);
+
+    // 1.5px ink rule under the header
+    g.setColour(ink);
+    g.fillRect(juce::Rectangle<float>(0.0f, (float)kHeaderH - 1.0f,
+                                      (float)kWindowW, 1.5f));
+
+    // ── Stage grid: 9 columns, top stripe + section header per column ────
+    const int yStage = kHeaderH + kDiagramH;          // 120
+    const int gridX  = kSideMargin;
+    const int gridW  = kWindowW - 2 * kSideMargin;    // 976
+    const int colW   = gridW / 9;                     // 108
+    const int stripeH = 5;
+
+    auto numFont  = BigDawgLookAndFeel::makeMonoFont(9.5f, false);
+    auto nameFont = BigDawgLookAndFeel::makeDisplayFont(11.0f);
+
+    for (int i = 0; i < 9; ++i)
+    {
+        const int colX = gridX + i * colW;
+
+        // Top stripe — stage colour
+        g.setColour(stageStripeColour(i));
+        g.fillRect(juce::Rectangle<int>(colX + 2, yStage,
+                                        colW - 4, stripeH));
+
+        // Section number (small, half opacity)
+        g.setColour(ink.withMultipliedAlpha(0.55f));
+        g.setFont(numFont);
+        g.drawFittedText(stageNumber(i),
+                         juce::Rectangle<int>(colX + 8, yStage + stripeH + 2,
+                                              colW - 16, 12),
+                         juce::Justification::topLeft, 1);
+
+        // Section name (Archivo Black)
+        g.setColour(ink);
+        g.setFont(nameFont);
+        g.drawFittedText(stageName(i),
+                         juce::Rectangle<int>(colX + 8, yStage + stripeH + 14,
+                                              colW - 16, 14),
+                         juce::Justification::topLeft, 1);
+
+        // EQ placeholder text — v0.2.1 wiring
+        if (i == 7)
+        {
+            g.setColour(ink.withMultipliedAlpha(0.4f));
+            g.setFont(BigDawgLookAndFeel::makeMonoFont(8.5f, false));
+            g.drawFittedText("VOICED IN",
+                             juce::Rectangle<int>(colX + 4, yStage + 80,
+                                                  colW - 8, 12),
+                             juce::Justification::centred, 1);
+            g.drawFittedText("v0.2.1",
+                             juce::Rectangle<int>(colX + 4, yStage + 92,
+                                                  colW - 8, 12),
+                             juce::Justification::centred, 1);
+        }
+    }
+}
+
 void DemarcoToneEditor::resized()
 {
-    const int yContent = 33;
-
-    // Top-bar right side, right-aligned, in this order (right to left):
-    //   PresetStepper  |  V0.1  |  HI-FI toggle
-    const int stepperW = 140;
-    const int stepperH = 20;
-    presetStepper.setBounds(getWidth() - stepperW - 14,
-                            (32 - stepperH) / 2,
-                            stepperW, stepperH);
-
-    // V0.1 is painted in paint() as text; reserve 40px to its left.
-    // HI-FI toggle sits to the left of V0.1 with a 14px gap.
-    const int hifiW = 78;     // 39px per cell (LO-FI / HI-FI), readable at 10px mono bold
-    const int hifiH = 18;
-    const int hifiX = presetStepper.getX() - 8 /*stepper-V0.1 gap*/
-                      - 40 /*V0.1*/ - 14 /*V0.1-toggle gap*/ - hifiW;
-    hifiToggle.setBounds(hifiX, (32 - hifiH) / 2, hifiW, hifiH);
-
-    // Column x-origins (must match paint()) — 8 columns, total 840.
-    // 0=DRIVE 1=DETUNE 2=BITCRUSH 3=CHORUS 4=VIBRATO 5=WOW 6=REVERB 7=OUT
-    const int widths[8] = { 70, 70, 80, 190, 140, 70, 160, 60 };
-    int x0[8];
-    int acc = 0;
-    for (int i = 0; i < 8; ++i) { x0[i] = acc; acc += widths[i]; }
-
-    // Vertical zones within each column:
-    //   header band:  yContent .. yContent+30
-    //   toggle band:  yContent+30 .. yContent+60  (used by CHORUS / VIBRATO)
-    //   knob band:    yContent+60 .. 240
-    const int headerH = 30;
-    const int toggleH = 30;
-
-    auto columnKnobRow = [&](int colIndex, int knobCount, std::function<void(int, juce::Rectangle<int>)> place)
+    // ── Header ────────────────────────────────────────────────────────────
     {
-        const int xStart = x0[colIndex] + 6;
-        const int xEnd   = x0[colIndex] + widths[colIndex] - 6;
-        const int w      = xEnd - xStart;
-        const int perKnob = w / juce::jmax(1, knobCount);
-        const int yKnob = yContent + headerH + toggleH - 6;
-        const int hKnob = getHeight() - yKnob - 4;
-        for (int i = 0; i < knobCount; ++i)
+        const int hifiW = 88;
+        const int hifiH = 18;
+        hifiToggle.setBounds(kWindowW - kSideMargin - hifiW,
+                              (kHeaderH - hifiH) / 2,
+                              hifiW, hifiH);
+
+        const int psW = 320;
+        presetSelector.setBounds((kWindowW - psW) / 2,
+                                 0, psW, kHeaderH);
+    }
+
+    // ── Signal diagram ────────────────────────────────────────────────────
+    diagram.setBounds(0, kHeaderH, kWindowW, kDiagramH);
+
+    // ── Stage grid ────────────────────────────────────────────────────────
+    const int yStage = kHeaderH + kDiagramH;
+    const int hStage = kWindowH - yStage;
+    const int gridX  = kSideMargin;
+    const int gridW  = kWindowW - 2 * kSideMargin;
+    const int colW   = gridW / 9;
+    const int stripeH = 5;
+    const int headerBandH = 30;            // stripe + numeral + name
+    const int toggleBandH = 22;            // OFF/ON + (mode) row
+    const int knobYTop = yStage + stripeH + headerBandH + toggleBandH + 4;
+    const int knobAreaH = (yStage + hStage) - knobYTop - 4;
+
+    auto colRect = [&](int i) -> juce::Rectangle<int>
+    {
+        return { gridX + i * colW, yStage, colW, hStage };
+    };
+
+    // Helper: place an OFF/ON-style 2-cell toggle in the top of the toggle band.
+    auto placeOnOff = [&](BoxToggle& t, int colIndex, int width = 44, int height = 16)
+    {
+        const auto cr = colRect(colIndex);
+        t.setBounds(cr.getRight() - width - 6,
+                    yStage + stripeH + 2,         // align with section number
+                    width, height);
+    };
+
+    // Helper: place a mode toggle centered in the toggle band.
+    auto placeMode = [&](BoxToggle& t, int colIndex, int width)
+    {
+        const auto cr = colRect(colIndex);
+        t.setBounds(cr.getCentreX() - width / 2,
+                    yStage + stripeH + headerBandH - 6,
+                    width, 16);
+    };
+
+    // Helper: lay out 1..3 knobs as a row inside a column. For 4 knobs, row 1
+    // takes the first three and row 2 takes the fourth at column 1.
+    auto placeKnobsSingleRow = [&](int colIndex, std::initializer_list<Knob*> knobs)
+    {
+        const auto cr = colRect(colIndex);
+        const int n = (int)knobs.size();
+        const int innerL = cr.getX() + 4;
+        const int innerR = cr.getRight() - 4;
+        const int innerW = innerR - innerL;
+        const int cellW  = innerW / juce::jmax(1, n);
+        int idx = 0;
+        for (auto* k : knobs)
         {
-            auto box = juce::Rectangle<int>(xStart + i * perKnob, yKnob, perKnob, hKnob);
-            place(i, box);
+            const int x = innerL + idx * cellW;
+            const int knobBoxY = knobYTop;
+            k->setBounds(x + 2, knobBoxY, cellW - 4, knobAreaH);
+            ++idx;
         }
     };
 
-    // 01 DRIVE (col 0)
-    columnKnobRow(0, 1, [this](int, juce::Rectangle<int> r)
-    {
-        driveKnob.setBounds(r.reduced(4, 2));
-    });
+    // 01 DRIVE — single knob, centered
+    placeKnobsSingleRow(0, { &driveKnob });
 
-    // 02 DETUNE (col 1) — OFF/ON toggle above the CENTS knob
-    {
-        auto toggleBand = juce::Rectangle<int>(x0[1] + 8, yContent + headerH - 2,
-                                               widths[1] - 16, toggleH - 4);
-        auto t = toggleBand.withSizeKeepingCentre(52, 16);
-        detuneOnToggle.setBounds(t);
-    }
-    columnKnobRow(1, 1, [this](int, juce::Rectangle<int> r)
-    {
-        detuneKnob.setBounds(r.reduced(4, 2));
-    });
+    // 02 DETUNE — OFF/ON, single knob (CENTS)
+    placeOnOff(detuneOnToggle, 1);
+    placeKnobsSingleRow(1, { &detuneKnob });
 
-    // 03 BITCRUSH (col 2) — two knobs side-by-side (BITS, RATE)
-    columnKnobRow(2, 2, [this](int i, juce::Rectangle<int> r)
-    {
-        ArcKnob* knobs[] = { &bitcrushBitsKnob, &bitcrushRateKnob };
-        knobs[i]->setBounds(r.reduced(2, 2));
-    });
+    // 03 BITCRUSH — two knobs (no OFF/ON: bypass is implicit at transparent values)
+    placeKnobsSingleRow(2, { &bitcrushBitsKnob, &bitcrushRateKnob });
 
-    // 04 CHORUS / FLANGER (col 3)
-    //   Header band: mode toggle (CHORUS / FLANGER) replaces the static name.
-    //   Toggle band: OFF/ON + SINE/TRI side-by-side (unchanged from prior layout).
-    //   Knob band: 4 knobs.
+    // 04 CHORUS — OFF/ON, mode toggle (CHO/FLG), shape toggle (SINE/TRI),
+    //            row 1: RATE / DEPTH / MIX, row 2: WIDTH centered.
+    placeOnOff(chorusOnToggle, 3);
     {
-        // Mode toggle sits inside the header, to the right of the numeral.
-        const int modeY = yContent + 6;                // roughly aligned with numeral
-        const int modeH = 16;
-        const int modeW = widths[3] - 30;              // leave space for the numeral on the left
-        chorusModeToggle.setBounds(x0[3] + 24, modeY, modeW, modeH);
+        // Two mode-band toggles side by side, centered.
+        const int gap = 6;
+        const int wMode = 50;   // CHO/FLG
+        const int wShape = 50;  // SINE/TRI
+        const int totalW = wMode + gap + wShape;
+        const auto cr = colRect(3);
+        const int bandY = yStage + stripeH + headerBandH - 6;
+        const int xLeft = cr.getCentreX() - totalW / 2;
+        chorusModeToggle.setBounds(xLeft, bandY, wMode, 16);
+        chorusShapeToggle.setBounds(xLeft + wMode + gap, bandY, wShape, 16);
     }
     {
-        auto toggleBand = juce::Rectangle<int>(x0[3] + 8, yContent + headerH - 2,
-                                               widths[3] - 16, toggleH - 4);
-        const int tw = 70, th = 18, gap = 14;
-        const int totalW = tw * 2 + gap;
-        const int tx = toggleBand.getCentreX() - totalW / 2;
-        const int ty = toggleBand.getCentreY() - th / 2;
-        chorusOnToggle.setBounds(tx,              ty, tw, th);
-        chorusShapeToggle.setBounds(tx + tw + gap, ty, tw, th);
-    }
-    columnKnobRow(3, 4, [this](int i, juce::Rectangle<int> r)
-    {
-        ArcKnob* knobs[] = { &chorusRate, &chorusDepth, &chorusMix, &chorusWidth };
-        knobs[i]->setBounds(r.reduced(3, 2));
-    });
+        const auto cr = colRect(3);
+        const int innerL = cr.getX() + 4;
+        const int innerR = cr.getRight() - 4;
+        const int innerW = innerR - innerL;
+        const int rowH   = knobAreaH / 2 - 2;
+        const int cellW  = innerW / 3;
 
-    // 05 VIBRATO (col 4) — OFF/ON toggle + 2 knobs
-    {
-        auto toggleBand = juce::Rectangle<int>(x0[4] + 8, yContent + headerH - 2,
-                                               widths[4] - 16, toggleH - 4);
-        auto t = toggleBand.withSizeKeepingCentre(80, 18);
-        vibratoOnToggle.setBounds(t);
-    }
-    columnKnobRow(4, 2, [this](int i, juce::Rectangle<int> r)
-    {
-        ArcKnob* knobs[] = { &vibratoRate, &vibratoDepth };
-        knobs[i]->setBounds(r.reduced(4, 2));
-    });
+        // Row 1: RATE / DEPTH / MIX
+        Knob* row1[] = { &chorusRate, &chorusDepth, &chorusMix };
+        for (int i = 0; i < 3; ++i)
+            row1[i]->setBounds(innerL + i * cellW + 1, knobYTop,
+                               cellW - 2, rowH);
 
-    // 06 WOW (col 5)
-    columnKnobRow(5, 1, [this](int, juce::Rectangle<int> r)
-    {
-        wowFlutter.setBounds(r.reduced(4, 2));
-    });
-
-    // 07 REVERB (col 6)
-    //   Header band: mode toggle (SPRING / SLAP / PLATE) replaces the static name.
-    //   Toggle band: OFF/ON.
-    //   Knob band: MIX + TONE.
-    {
-        const int modeY = yContent + 6;
-        const int modeH = 16;
-        const int modeW = widths[6] - 30;              // leave space for numeral
-        reverbModeToggle.setBounds(x0[6] + 24, modeY, modeW, modeH);
+        // Row 2: WIDTH at column 1 (left), centered horizontally for visual balance
+        chorusWidth.setBounds(innerL + cellW + 1, knobYTop + rowH + 4,
+                              cellW - 2, rowH);
     }
-    {
-        auto toggleBand = juce::Rectangle<int>(x0[6] + 8, yContent + headerH - 2,
-                                               widths[6] - 16, toggleH - 4);
-        auto t = toggleBand.withSizeKeepingCentre(70, 18);
-        reverbOnToggle.setBounds(t);
-    }
-    columnKnobRow(6, 2, [this](int i, juce::Rectangle<int> r)
-    {
-        ArcKnob* knobs[] = { &reverbMix, &reverbTone };
-        knobs[i]->setBounds(r.reduced(4, 2));
-    });
 
-    // OUT (col 7)
-    columnKnobRow(7, 1, [this](int, juce::Rectangle<int> r)
-    {
-        outputTrim.setBounds(r.reduced(4, 2));
-    });
+    // 05 VIBRATO — OFF/ON, two knobs (RATE, DEPTH)
+    placeOnOff(vibratoOnToggle, 4);
+    placeKnobsSingleRow(4, { &vibratoRate, &vibratoDepth });
+
+    // 06 WOW — single knob (AMOUNT), no OFF/ON
+    placeKnobsSingleRow(5, { &wowFlutter });
+
+    // 07 SPRING — OFF/ON, mode (SPR/SLP/PLT), two knobs (MIX, TONE)
+    placeOnOff(reverbOnToggle, 6);
+    placeMode(reverbModeToggle, 6, 78);
+    placeKnobsSingleRow(6, { &reverbMix, &reverbTone });
+
+    // 08 EQ — placeholder; nothing to position.
+
+    // OUT — single knob (TRIM)
+    placeKnobsSingleRow(8, { &outputTrim });
 }
